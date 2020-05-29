@@ -153,7 +153,8 @@ func (b *Bar) Complete(text string) {
 	// If there is an animated line-overwriting progress indicator running,
 	// explicitly stop and then unindent by writing without a spinner prefix.
 	if b.ticker != nil {
-		b.Done()
+		b.ticker.Stop()
+		b.ticker = nil
 		b.overwrite("")
 	}
 }
@@ -162,8 +163,11 @@ func (b *Bar) Complete(text string) {
 // Call in a defer statement after creation to ensure that the bar stops if a
 // return is encountered prior to calling the Complete step.
 func (b *Bar) Done() {
+	b.Lock()
+	defer b.Unlock()
 	if b.ticker != nil {
 		b.ticker.Stop()
+		b.ticker = nil
 		b.overwrite("")
 	}
 }
@@ -186,9 +190,19 @@ func interactiveTerminal() bool {
 func (b *Bar) writeOnTick() {
 	spinner := []string{"|", "/", "-", "\\"}
 	idx := 0
-	for _ = range b.ticker.C {
-		b.overwrite(spinner[idx] + " ")
-		idx = (idx + 1) % 4
+	var ch <-chan time.Time
+	func () {
+		b.Lock()
+		defer b.Unlock()
+		ch = b.ticker.C
+	}()
+	for _ = range ch {
+		func () {
+			b.Lock()
+			defer b.Unlock()
+			b.overwrite(spinner[idx] + " ")
+			idx = (idx + 1) % 4
+		}()
 	}
 }
 
