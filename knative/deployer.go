@@ -3,13 +3,14 @@ package knative
 import (
 	"bytes"
 	"fmt"
-	"github.com/boson-project/faas"
-	"github.com/boson-project/faas/k8s"
 	"io"
-	commands "knative.dev/client/pkg/kn/commands"
-	"knative.dev/client/pkg/kn/core"
 	"os"
 	"strings"
+
+	"github.com/boson-project/faas"
+	"github.com/boson-project/faas/k8s"
+	commands "knative.dev/client/pkg/kn/commands"
+	"knative.dev/client/pkg/kn/core"
 )
 
 func NewDeployer() *Deployer {

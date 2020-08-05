@@ -12,15 +12,16 @@ import (
 type Pusher struct {
 	// Verbose logging.
 	Verbose bool
+	Tag     string
 }
 
 // NewPusher creates an instance of a docker-based image pusher.
-func NewPusher() *Pusher {
-	return &Pusher{}
+func NewPusher(tag string) *Pusher {
+	return &Pusher{Tag: tag}
 }
 
 // Push an image by name.  Docker is expected to be already authenticated.
-func (n *Pusher) Push(image string) (err error) {
+func (n *Pusher) Push() (err error) {
 	// Check for the docker binary explicitly so that we can return
 	// an extra-friendly error message.
 	_, err = exec.LookPath("docker")
@@ -31,7 +32,7 @@ func (n *Pusher) Push(image string) (err error) {
 
 	// set up the command, specifying a sanitized project name and connecting
 	// standard output and error.
-	cmd := exec.Command("docker", "push", image)
+	cmd := exec.Command("docker", "push", n.Tag)
 
 	// If verbose logging is enabled, echo appsody's chatty stdout.
 	if n.Verbose {
