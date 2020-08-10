@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"os/user"
@@ -10,6 +11,7 @@ import (
 	"github.com/boson-project/faas/appsody"
 	"github.com/boson-project/faas/knative"
 	"github.com/spf13/cobra"
+	strs "strings"
 )
 
 func CompleteFunctionList(cmd *cobra.Command, args []string, toComplete string) (strings []string, directive cobra.ShellCompDirective) {
@@ -52,18 +54,24 @@ func CompleteRegistryList(cmd *cobra.Command, args []string, toComplete string) 
 		return
 	}
 	decoder := json.NewDecoder(file)
-	var data map[string]interface{}
+	var data struct { Auths map[string] struct { Auth string } }
 	err = decoder.Decode(&data)
 	if err != nil {
 		return
 	}
-	auth, ok := data["auths"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	strings = make([]string, len(auth))
-	for reg := range auth {
-		strings = append(strings, reg)
+	auth := data.Auths
+	strings = make([]string, 0, len(auth))
+	for reg, regData := range auth {
+		authStr := regData.Auth
+		cred, err := base64.StdEncoding.DecodeString(authStr)
+		login := ""
+		if err == nil {
+			parts := strs.Split(string(cred), ":")
+			if len(parts) == 2 {
+				login = "/" + parts[0]
+			}
+		}
+		strings = append(strings, reg + login)
 	}
 	directive = cobra.ShellCompDirectiveDefault
 	return

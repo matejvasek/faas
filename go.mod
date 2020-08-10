@@ -15,7 +15,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/ory/viper v1.7.4
-	github.com/spf13/cobra v1.0.0
+	github.com/spf13/cobra v1.0.1-0.20200719220246-c6fe2d4df810
 	github.com/stretchr/testify v1.5.1 // indirect
 	github.com/tsuyoshiwada/go-gitcmd v0.0.0-20180205145712-5f1f5f9475df // indirect
 	github.com/urfave/cli v1.22.4 // indirect
