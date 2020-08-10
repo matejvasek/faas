@@ -39,7 +39,6 @@ func init() {
 	root.AddCommand(buildCmd)
 	buildCmd.Flags().StringP("path", "p", cwd, "Path to the function project directory")
 	buildCmd.Flags().StringP("tag", "t", "", "Specify an image tag, for example quay.io/myrepo/project.name:latest")
-	buildCmd.Flags().BoolP("push", "u", false, "Push the image to a registry")
 }
 
 type buildConfig struct {
@@ -54,7 +53,6 @@ func buildImage(cmd *cobra.Command, args []string) (err error) {
 		Verbose: viper.GetBool("verbose"),
 		Path:    viper.GetString("path"),
 		Tag:     viper.GetString("tag"),
-		Push:    viper.GetBool("push"),
 	}
 	return Build(config)
 }

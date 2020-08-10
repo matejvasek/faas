@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/boson-project/faas"
+	"github.com/boson-project/faas/docker"
 	"github.com/boson-project/faas/knative"
 	"github.com/ory/viper"
 	"github.com/spf13/cobra"
@@ -67,6 +68,7 @@ func deployImage(cmd *cobra.Command, args []string) (err error) {
 	client, err := faas.New(
 		faas.WithVerbose(config.Verbose),
 		faas.WithDeployer(deployer),
+		faas.WithPusher(docker.NewPusher(f.Tag)),
 	)
 	// TODO: Handle -e flag
 	_, err = client.Deploy(f.Name, f.Tag)

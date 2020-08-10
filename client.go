@@ -256,7 +256,6 @@ func WithDomainSearchLimit(limit int) Option {
 
 // Initialize creates a new function project locally
 func (c *Client) Initialize(runtime, template, name, tag, root string) (f *Function, err error) {
-	c.progressListener.Increment("Initializing new function project")
 	// Create an instance of a function representation at the given root.
 	f, err = NewFunction(root)
 	if err != nil {
@@ -281,26 +280,20 @@ func (c *Client) Initialize(runtime, template, name, tag, root string) (f *Funct
 }
 
 func (c *Client) Build(path string) (image string, err error) {
-	c.progressListener.Increment("Building container image")
 	image, err = c.builder.Build(path)
-	if err != nil {
-		return "", err
-	}
-	c.progressListener.Increment("Pushing image to container registry")
-	err = c.pusher.Push()
-	if err != nil {
-		return "", err
-	}
-	return image, nil
+	return image, err
 }
 
 func (c *Client) Deploy(name, tag string) (address string, err error) {
-	c.progressListener.Increment("Deploying function to cluster")
-	address, err = c.deployer.Deploy(name, tag)
+	err = c.pusher.Push() // First push the image to an image registry
 	if err != nil {
 		return "", err
 	}
+	address, err = c.deployer.Deploy(name, tag)
+	return address, err
+}
 
+func (c *Client) Route(name, address string) (route string) {
 	// Ensure that the allocated final address is enabled with the
 	// configured DNS provider.
 	// NOTE:
@@ -308,14 +301,8 @@ func (c *Client) Deploy(name, tag string) (address string, err error) {
 	// but DNS subdomain CNAME to the Kourier Load Balancer is
 	// still manual, and the initial cluster config to suppot the TLD
 	// is still manual.
-	c.progressListener.Increment("Creating route to function")
 	c.dnsProvider.Provide(name, address)
-
-	// TODO: Create a status structure and return it for clients to use
-	// for output, such as from the CLI.
-	fmt.Printf("https://%v/\n", name)
-
-	return name, nil
+	return name
 }
 
 // Create a service function of the given runtime.
@@ -323,6 +310,7 @@ func (c *Client) Deploy(name, tag string) (address string, err error) {
 // Name is derived from root if possible.
 // Root is defaulted to the current working directory.
 func (c *Client) Create(runtime, template, name, tag, root string) (err error) {
+	c.progressListener.SetTotal(4)
 	defer c.progressListener.Done()
 
 	// Initialize, writing out a template implementation and a config file.
@@ -331,21 +319,16 @@ func (c *Client) Create(runtime, template, name, tag, root string) (err error) {
 	// optional name the other passes root path).  This could easily cause
 	// confusion and thus we may want to rename Initalizer to the more specific
 	// task it performs: ContextTemplateWriter or similar.
+	c.progressListener.Increment("Initializing new function project")
 	f, err := c.Initialize(runtime, template, name, tag, root)
 	if err != nil {
 		return err
 	}
 
 	// Build the now-initialized service function
-	// c.progressListener.Increment("Building")
+	c.progressListener.Increment("Building container image")
 	_, err = c.Build(f.Root)
 	if err != nil {
-		return
-	}
-
-	// If running local-only, we're done.
-	if c.local {
-		c.progressListener.Complete("Created project")
 		return
 	}
 
@@ -356,11 +339,15 @@ func (c *Client) Create(runtime, template, name, tag, root string) (err error) {
 
 	// Deploy the initialized service function, returning its publicly
 	// addressible name for possible registration.
-	// c.progressListener.Increment("Deploying")
+	c.progressListener.Increment("Deploying function to cluster")
 	address, err := c.deployer.Deploy(name, tag)
 	if err != nil {
 		return
 	}
+
+	// Create an external route to the function
+	c.progressListener.Increment("Creating route to function")
+	c.Route(name, address)
 
 	c.progressListener.Complete("Create complete")
 
