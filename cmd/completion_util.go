@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"encoding/json"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	"os"
 	"os/user"
 	"path"
@@ -10,7 +12,34 @@ import (
 	"github.com/boson-project/faas/appsody"
 	"github.com/boson-project/faas/knative"
 	"github.com/spf13/cobra"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func CompleteNamespaceList(cmd *cobra.Command, args []string, toComplete string) (strings []string, directive cobra.ShellCompDirective) {
+	directive = cobra.ShellCompDirectiveError
+
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	configOverrides := &clientcmd.ConfigOverrides{}
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+	config, err := kubeConfig.ClientConfig()
+	if err != nil {
+		return
+	}
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return
+	}
+	nsList, err := client.CoreV1().Namespaces().List(metav1.ListOptions{})
+	if err != nil {
+		return
+	}
+	strings = make([]string, 0, len(nsList.Items))
+	for _, item := range nsList.Items {
+		strings = append(strings, item.Name)
+	}
+	directive = cobra.ShellCompDirectiveDefault
+	return
+}
 
 func CompleteFunctionList(cmd *cobra.Command, args []string, toComplete string) (strings []string, directive cobra.ShellCompDirective) {
 	lister, err := knative.NewLister(faas.DefaultNamespace)

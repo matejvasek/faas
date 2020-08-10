@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/boson-project/faas"
@@ -40,6 +41,11 @@ func init() {
 	deployCmd.Flags().StringP("namespace", "s", "default", "Cluster namespace to deploy the Function in")
 	deployCmd.Flags().StringP("path", "p", cwd, "Path to the function project directory")
 	deployCmd.Flags().StringP("tag", "t", "", "Specify an image tag, for example quay.io/myrepo/project.name:latest")
+
+	err = deployCmd.RegisterFlagCompletionFunc("namespace", CompleteNamespaceList)
+	if err != nil {
+		fmt.Println("Error while calling RegisterFlagCompletionFunc: ", err)
+	}
 }
 
 func deployImage(cmd *cobra.Command, args []string) (err error) {
