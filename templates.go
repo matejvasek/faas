@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/markbates/pkger"
@@ -24,6 +23,7 @@ const DefaultTemplate = "http"
 type fileAccessor interface {
 	Stat(name string) (os.FileInfo, error)
 	Open(p string) (file, error)
+	Walk(p string, wf filepath.WalkFunc) error
 }
 
 type file interface {
@@ -68,8 +68,12 @@ func copyEmbedded(runtime, template, dest string) error {
 	// Copy files to the destination
 	// Example embedded path:
 	//   /templates/go/http
-	src := filepath.Join("/templates", runtime, template)
-	return copy(src, dest, embeddedAccessor{})
+	src := filepath.Join(string(filepath.Separator), "templates", runtime, template)
+	fa := chrootedFileAccessor{
+		accessor: embeddedAccessor{},
+		root: src,
+	}
+	return copy(fa, dest, string(filepath.Separator))
 }
 
 func copyFilesystem(templatesPath, runtime, templateFullName, dest string) error {
@@ -84,12 +88,43 @@ func copyFilesystem(templatesPath, runtime, templateFullName, dest string) error
 	// Example FileSystem path:
 	//   /home/alice/.config/faas/templates/boson-experimental/go/json
 	src := filepath.Join(templatesPath, repo, runtime, template)
-	return copy(src, dest, filesystemAccessor{})
+	fa := filesystemAccessor{}
+	return copy(fa, dest, src)
 }
 
 func isEmbedded(runtime, template string) bool {
-	_, err := pkger.Stat(filepath.Join("/templates", runtime, template))
+	_, err := pkger.Stat(filepath.Join(string(filepath.Separator), "templates", runtime, template))
 	return err == nil
+}
+
+func copy(fs fileAccessor, dest, src string) error {
+	fs.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			err = os.MkdirAll(filepath.Join(dest,relPath), info.Mode())
+			return err
+		} else {
+			srcF, err := fs.Open(path)
+			if err != nil {
+				return err
+			}
+			defer srcF.Close()
+			destF, err := os.OpenFile(filepath.Join(dest, relPath), os.O_RDWR|os.O_CREATE|os.O_TRUNC, info.Mode())
+			if err != nil {
+				return err
+			}
+			defer destF.Close()
+			_, err = io.Copy(destF, srcF)
+			return err
+		}
+	})
+	return nil
 }
 
 type embeddedAccessor struct{}
@@ -102,6 +137,15 @@ func (a embeddedAccessor) Open(path string) (file, error) {
 	return pkger.Open(path)
 }
 
+func (a embeddedAccessor) Walk(dir string, wf filepath.WalkFunc) error {
+	return pkger.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if strings.Contains(path, ":") {
+			path = strings.Join(strings.Split(path, ":")[1:], "")
+		}
+		return wf(path, info, err)
+	})
+}
+
 type filesystemAccessor struct{}
 
 func (a filesystemAccessor) Stat(path string) (os.FileInfo, error) {
@@ -112,73 +156,65 @@ func (a filesystemAccessor) Open(path string) (file, error) {
 	return os.Open(path)
 }
 
-func copy(src, dest string, accessor fileAccessor) (err error) {
-	node, err := accessor.Stat(src)
-	if err != nil {
-		return
-	}
-	if node.IsDir() {
-		return copyNode(src, dest, accessor)
-	} else {
-		return copyLeaf(src, dest, accessor)
-	}
+func (a filesystemAccessor) Walk(p string, wf filepath.WalkFunc) error {
+	return filepath.Walk(p, wf)
 }
 
-func copyNode(src, dest string, accessor fileAccessor) (err error) {
-	node, err := accessor.Stat(src)
-	if err != nil {
-		return
-	}
+type chrootedFileAccessor struct {
+	accessor fileAccessor
+	root     string
+}
 
-	err = os.MkdirAll(dest, node.Mode())
-	if err != nil {
-		return
-	}
+func (c chrootedFileAccessor) Stat(name string) (os.FileInfo, error) {
+	name = filepath.Join(string(filepath.Separator), name)
+	name = filepath.Join(c.root, name)
+	return c.accessor.Stat(name)
+}
 
-	children, err := readDir(src, accessor)
-	if err != nil {
-		return
-	}
-	for _, child := range children {
-		if err = copy(filepath.Join(src, child.Name()), filepath.Join(dest, child.Name()), accessor); err != nil {
-			return
+func (c chrootedFileAccessor) Open(name string) (file, error) {
+	name = filepath.Join(string(filepath.Separator), name)
+	name = filepath.Join(c.root, name)
+	return c.accessor.Open(name)
+}
+
+func (c chrootedFileAccessor) Walk(name string, wf filepath.WalkFunc) error {
+	name = filepath.Join(string(filepath.Separator), name)
+	name = filepath.Join(c.root, name)
+	return c.accessor.Walk(name, func(path string, info os.FileInfo, err error) error {
+		rel, err := filepath.Rel(c.root, path)
+		if err != nil {
+			return err
 		}
-	}
-	return
+		path = filepath.Join(string(filepath.Separator), rel)
+		return wf(path, info, err)
+	})
 }
 
-func readDir(src string, accessor fileAccessor) ([]os.FileInfo, error) {
-	f, err := accessor.Open(src)
-	if err != nil {
-		return nil, err
-	}
-	list, err := f.Readdir(-1)
-	f.Close()
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(list, func(i, j int) bool { return list[i].Name() < list[j].Name() })
-	return list, nil
+type fileAccessorWithRenames struct {
+	accessor fileAccessor
+	renames  map[string]string
 }
 
-func copyLeaf(src, dest string, accessor fileAccessor) (err error) {
-	srcFile, err := accessor.Open(src)
-	if err != nil {
-		return
+func (f fileAccessorWithRenames) Stat(name string) (os.FileInfo, error) {
+	renamed, ok := f.renames[filepath.Clean(name)]
+	if ok {
+		name = renamed
 	}
-	defer srcFile.Close()
+	return f.accessor.Stat(name)
+}
 
-	srcFileInfo, err := accessor.Stat(src)
-	if err != nil {
-		return
+func (f fileAccessorWithRenames) Open(name string) (file, error) {
+	renamed, ok := f.renames[filepath.Clean(name)]
+	if ok {
+		name = renamed
 	}
+	return f.accessor.Open(name)
+}
 
-	destFile, err := os.OpenFile(dest, os.O_RDWR|os.O_CREATE|os.O_TRUNC, srcFileInfo.Mode())
-	if err != nil {
-		return
+func (f fileAccessorWithRenames) Walk(name string, wf filepath.WalkFunc) error {
+	renamed, ok := f.renames[filepath.Clean(name)]
+	if ok {
+		name = renamed
 	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, srcFile)
-	return
+	
 }
