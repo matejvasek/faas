@@ -42,6 +42,7 @@ kn func delete -n apps myfunc
 	RunE:              runDelete,
 }
 
+
 func runDelete(cmd *cobra.Command, args []string) (err error) {
 	config := newDeleteConfig(args).Prompt()
 
@@ -49,6 +50,10 @@ func runDelete(cmd *cobra.Command, args []string) (err error) {
 
 	// Initialize func with explicit name (when provided)
 	if len(args) > 0 && args[0] != "" {
+		pathChanged := cmd.Flags().Changed("path")
+		if pathChanged {
+			return fmt.Errorf("Only one of --path and [NAME] should be provided")
+		}
 		function = bosonFunc.Function{
 			Name: args[0],
 		}
