@@ -45,14 +45,23 @@ kn func delete -n apps myfunc
 func runDelete(cmd *cobra.Command, args []string) (err error) {
 	config := newDeleteConfig(args).Prompt()
 
-	function, err := bosonFunc.NewFunction(config.Path)
-	if err != nil {
-		return
-	}
+	var function bosonFunc.Function
 
-	// Check if the Function has been initialized
-	if !function.Initialized() {
-		return fmt.Errorf("the given path '%v' does not contain an initialized function", config.Path)
+	// Initialize func with explicit name (when provided)
+	if len(args) > 0 && args[0] != "" {
+		function = bosonFunc.Function{
+			Name: args[0],
+		}
+	} else {
+		function, err = bosonFunc.NewFunction(config.Path)
+		if err != nil {
+			return
+		}
+
+		// Check if the Function has been initialized
+		if !function.Initialized() {
+			return fmt.Errorf("the given path '%v' does not contain an initialized function", config.Path)
+		}
 	}
 
 	ns := config.Namespace
