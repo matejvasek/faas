@@ -15,14 +15,16 @@ jobs:
         os: ["windows-latest"]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
-        with:
-          go-version: ${{ matrix.go }}
+      - name: whoami
+        run: whoami
       - name: hostname
         run: hostname
       - name: ipconfig
         run: ipconfig
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
       - name: Core Unit Tests
         run: make test
       - name: sleep
