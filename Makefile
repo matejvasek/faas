@@ -51,7 +51,7 @@ $(BIN): $(CODE)
 	env CGO_ENABLED=0 go build -ldflags $(LDFLAGS) ./cmd/$(BIN)
 
 test: $(CODE) ## Run core unit tests
-	go test -v ./
+	go test -v repositories_test.go
 
 check: bin/golangci-lint ## Check code quality (lint)
 	./bin/golangci-lint run --timeout 300s
