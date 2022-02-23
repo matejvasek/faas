@@ -15,21 +15,9 @@ jobs:
         os: ["windows-latest"]
     runs-on: ${{ matrix.os }}
     steps:
-      - name: whoami
-        run: whoami
-      - name: hostname
-        run: hostname
-      - name: ipconfig
-        run: ipconfig
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go }}
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        with:
-          sudo: false
-          limit-access-to-actor: true
-          timeout-minutes: 30
       - name: Core Unit Tests
         run: make test
