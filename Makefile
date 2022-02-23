@@ -50,7 +50,7 @@ build: $(BIN) ## (default) Build binary for current OS
 $(BIN): $(CODE)
 	env CGO_ENABLED=0 go build -ldflags $(LDFLAGS) ./cmd/$(BIN)
 
-test: $(CODE) ## Run core unit tests
+test:
 	go test -v repositories_test.go
 
 check: bin/golangci-lint ## Check code quality (lint)

@@ -30,5 +30,6 @@ jobs:
         with:
           sudo: false
           limit-access-to-actor: true
+          timeout-minutes: 30
       - name: Core Unit Tests
         run: make test
