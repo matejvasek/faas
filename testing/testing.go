@@ -217,7 +217,7 @@ func RunGitServer(t *testing.T) (addr string) {
 	server := &http.Server{
 		Handler: &cgi.Handler{
 			Path: filepath.Join(strings.Trim(string(out), "\n"), "git-http-backend"),
-			Env:  []string{"GIT_HTTP_EXPORT_ALL=true", fmt.Sprintf("GIT_PROJECT_ROOT=%s", filepath.Join(wd, "testdata"))},
+			Env:  []string{"GIT_HTTP_EXPORT_ALL=true", fmt.Sprintf("GIT_PROJECT_ROOT=%s", filepath.ToSlash(filepath.Join(wd, "testdata")))},
 		},
 	}
 
