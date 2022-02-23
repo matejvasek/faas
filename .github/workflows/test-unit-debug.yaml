@@ -25,3 +25,5 @@ jobs:
         run: ipconfig
       - name: Core Unit Tests
         run: make test
+      - name: sleep
+        run: timeout 120
