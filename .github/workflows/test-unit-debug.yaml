@@ -30,14 +30,9 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/setup-java@v1
-        with:
-          java-version: ${{ matrix.java }}
       - name: A
         run: hostname
       - name: B
         run: ipconfig
       - name: Core Unit Tests
         run: make test
-      - name: Template Unit Tests
-        run: make test-templates
