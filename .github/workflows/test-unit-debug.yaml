@@ -23,11 +23,11 @@ jobs:
         run: ipconfig
       - name: install-tmate
         run: sudo apt-get install tmate
-      - name: tmate
-        run: tmate
       - uses: actions/checkout@v2
       - uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go }}
+      - name: tmate
+        run: tmate
       - name: Core Unit Tests
         run: make test
