@@ -1,0 +1,28 @@
+name: Func Unit Test
+
+on:
+  push:
+    branches:
+      - "test-win-git"
+
+jobs:
+  test:
+    name: Unit Test Debug
+    strategy:
+      matrix:
+        go: [1.16.x]
+        java: [11]
+        os: ["windows-latest"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+      - uses: actions/setup-java@v1
+        with:
+          java-version: ${{ matrix.java }}
+      - name: Core Unit Tests
+        run: make test
+      - name: Template Unit Tests
+        run: make test-templates
