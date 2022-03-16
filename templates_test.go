@@ -160,9 +160,9 @@ func TestTemplates_Custom(t *testing.T) {
 // using this remote by default.
 func TestTemplates_Remote(t *testing.T) {
 	var err error
-	if runtime.GOOS == "windows" {
-		t.Skip("TODO fix this test on Windows CI") // TODO fix this
-	}
+	//if runtime.GOOS == "windows" {
+	//	t.Skip("TODO fix this test on Windows CI") // TODO fix this
+	//}
 
 	root := "testdata/testTemplatesRemote"
 	defer Using(t, root)()
