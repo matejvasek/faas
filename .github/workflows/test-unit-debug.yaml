@@ -23,6 +23,4 @@ jobs:
         with:
           java-version: ${{ matrix.java }}
       - name: Core Unit Tests
-        run: make test
-      - name: Template Unit Tests
-        run: make test-templates
+        run: go test -v -run "^\QTestRepositories_All\E|\QTestRepositories_Add\E|\QTestRepositories_AddDeafultName\E|\QTestRepositories_AddWithManifest\E|\QTestRepositories_AddExistingErrors\E|\QTestRepositories_Rename\E|\QTestRepositories_Remove\E|\QTestRepositories_URL\E|\QTestTemplates_Remote\E$"
