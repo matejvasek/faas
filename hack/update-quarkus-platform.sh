@@ -13,15 +13,12 @@ set -o xtrace
 LATEST_PLATFORM="$(curl -s "https://code.quarkus.io/api/platforms" | \
   jq -r '.platforms[0].streams[0].releases[0].quarkusCoreVersion')"
 
-echo "$LATEST_PLATFORM"
+echo "Latest Quarkus platform is: $LATEST_PLATFORM"
 
 XPATH='//*[local-name()="quarkus.platform.version"]/text()'
 
 CE_TEMPLATE_PLATFORM="$(xmllint --xpath "$XPATH" templates/quarkus/cloudevents/pom.xml)"
 HTTP_TEMPLATE_PLATFORM="$(xmllint --xpath "$XPATH" templates/quarkus/cloudevents/pom.xml)"
-
-echo "$CE_TEMPLATE_PLATFORM"
-echo "$HTTP_TEMPLATE_PLATFORM"
 
 if [ "$CE_TEMPLATE_PLATFORM" == "$LATEST_PLATFORM" ] && \
   [ "$HTTP_TEMPLATE_PLATFORM" == "$LATEST_PLATFORM" ]; then
@@ -29,6 +26,7 @@ if [ "$CE_TEMPLATE_PLATFORM" == "$LATEST_PLATFORM" ] && \
   exit 0
 fi
 
+echo "Quarkus platform in templates is out-of-sync."
 
 PR_BRANCH="update-quarkus-platform-${LATEST_PLATFORM}"
 
