@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# This script check whether Quarkus templates use current platform.
+# It's done by querying https://code.quarkus.io/api/platform.
+# If the platform is out of date this scripts create PR with an update.
+
 set -o errexit
 set -o nounset
 set -o pipefail
