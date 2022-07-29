@@ -32,7 +32,7 @@ fi
 
 PR_BRANCH="update-quarkus-platform-${LATEST_PLATFORM}"
 
-if git fetch && git checkout "$PR_BRANCH" ; then
+if git fetch origin "$PR_BRANCH" ; then
   echo "The PR branch already exists!"
   exit 0
 fi
