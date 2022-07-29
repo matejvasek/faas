@@ -29,13 +29,19 @@ if [ "$CE_TEMPLATE_PLATFORM" == "$LATEST_PLATFORM" ] && \
   exit 0
 fi
 
+
+PR_BRANCH="update-quarkus-platform-${LATEST_PLATFORM}"
+
+if git fetch && git checkout "$PR_BRANCH" ; then
+  echo "The PR branch already exists!"
+  exit 0
+fi
+
 sed -i -E "s#<quarkus.platform.version>.+</quarkus.platform.version>#<quarkus.platform.version>${LATEST_PLATFORM}</quarkus.platform.version>#g" \
   ./templates/quarkus/cloudevents/pom.xml
 sed -i -E "s#<quarkus.platform.version>.+</quarkus.platform.version>#<quarkus.platform.version>${LATEST_PLATFORM}</quarkus.platform.version>#g" \
   ./templates/quarkus/http/pom.xml
 make zz_filesystem_generated.go
-
-PR_BRANCH="update-quarkus-platform-${LATEST_PLATFORM}"
 
 git config --global user.email "quarkus-bot@example.com"
 git config --global user.name "quarkus-platform-update-bot"
