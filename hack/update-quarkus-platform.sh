@@ -8,6 +8,8 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+echo "$GITHUB_HEAD_REF"
+
 LATEST_PLATFORM="$(curl -s "https://code.quarkus.io/api/platforms" | \
   jq -r '.platforms[0].streams[0].releases[0].quarkusCoreVersion')"
 
