@@ -54,3 +54,4 @@ curl -v \
   -H "Authorization: token ${GITHUB_TOKEN}" \
   "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls" \
   -d "{\"title\":\"chore: update Quarkus Platform to ${LATEST_PLATFORM}\",\"body\":\"chore: update Quarkus Platform to ${LATEST_PLATFORM}\",\"head\":\"${GITHUB_REPOSITORY_OWNER}:${PR_BRANCH}\",\"base\":\"master\"}"
+
