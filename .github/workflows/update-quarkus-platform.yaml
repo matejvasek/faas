@@ -5,9 +5,9 @@ permissions:
   pull-requests: write
 
 on:
-  #schedule:
-  #  - cron: '*/15 * * * *'
-  pull_request
+  push:
+    #  schedule:
+    #    - cron: '*/15 * * * *'
 
 jobs:
   update:
