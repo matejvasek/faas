@@ -1,0 +1,24 @@
+name: Update Quarkus Platform in embedded templates
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+
+jobs:
+  update:
+    name: Update Quarkus Platform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Babashka
+        uses: turtlequeue/setup-babashka@v1.5.0
+        with:
+          babashka-version: v0.8.2
+      - name: Create PR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bb ./hack/update-quarkus-platform.clj
+
