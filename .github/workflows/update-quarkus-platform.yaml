@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: 14
       - name: Install NPM deps.
-        run: npm i xml2js -g && npm i octokit -g
+        run: sudo npm i xml2js -g && sudo npm i octokit -g
       - name: Create PR
         env:
           GITHUB_TOKEN: ${{ github.token }}
