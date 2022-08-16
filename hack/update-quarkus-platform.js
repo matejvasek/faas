@@ -39,7 +39,7 @@ const prExists = async (pred) => {
 
 }
 
-const parseString = (text) => new Promise((resolve, reject) => {
+const parseXML = (text) => new Promise((resolve, reject) => {
     xml2js.parseString(text, {}, (err, res) => {
         if (err) {
             reject(err)
@@ -50,7 +50,7 @@ const parseString = (text) => new Promise((resolve, reject) => {
 
 const platformFromPom = async (pomPath) => {
     const pomData = await readFile(pomPath, {encoding: 'utf8'});
-    const pom = await parseString(pomData)
+    const pom = await parseXML(pomData)
     return pom.project.properties[0]['quarkus.platform.version'][0]
 }
 
