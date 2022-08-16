@@ -14,9 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup Babashka
-        uses: turtlequeue/setup-babashka@v1.5.0
-        with:
-          babashka-version: v0.8.2
+        run: curl -L -s https://github.com/babashka/babashka/releases/download/v0.9.161/babashka-0.9.161-linux-amd64-static.tar.gz | sudo tar -zxf - > /usr/bin/bb && sudo chmod +x /usr/bin/bb
       - name: Create PR
         env:
           GITHUB_TOKEN: ${{ github.token }}
