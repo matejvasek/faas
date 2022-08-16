@@ -1,7 +1,7 @@
 const axios = require('axios')
 const xml2js = require('xml2js');
 const {Octokit} = require("octokit");
-const {readFile} = require('fs/promises');
+const {readFile,writeFile} = require('fs/promises');
 const {spawn} = require('node:child_process');
 
 const getLatestPlatform = async () => {
@@ -83,7 +83,7 @@ const updatePlatformInPom = async (pomPath, newPlatform) => {
     const pomData = await readFile(pomPath, {encoding: 'utf8'});
     const newPomData = pomData.replace(new RegExp('<quarkus.platform.version>[\\w.]+</quarkus.platform.version>', 'i'),
         `<quarkus.platform.version>${newPlatform}</quarkus.platform.version>`)
-    await fs.writeFile(pomPath, newPomData)
+    await writeFile(pomPath, newPomData)
 }
 
 const main = async () => {
