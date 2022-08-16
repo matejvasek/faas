@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Setup Babashka
-        run: curl -L -s https://github.com/babashka/babashka/releases/download/v0.9.161/babashka-0.9.161-linux-amd64-static.tar.gz | sudo tar --no-same-owner -zxf - -C /usr/bin/bb
+        run: curl -L -s https://github.com/babashka/babashka/releases/download/v0.9.161/babashka-0.9.161-linux-amd64-static.tar.gz | sudo tar --no-same-owner -zxf - -C /usr/bin/
       - name: Create PR
         env:
           GITHUB_TOKEN: ${{ github.token }}
