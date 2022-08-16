@@ -1,8 +1,8 @@
 //import {App, Octokit} from "octokit";
+//import xml2js from "xml2js";
 
 
 const xml2js = require('xml2js');
-//import xml2js from "xml2js";
 
 const {Octokit} = require("octokit");
 const https = require('https');
@@ -83,7 +83,7 @@ const httpPomPath = "templates/quarkus/http/pom.xml"
 
 const prepareBranch = async (branchName, prTitle) => {
     const script = `git config user.email "automation@knative.team" && \\
-  git config ser.name "Knative Automation" && \\
+  git config user.name "Knative Automation" && \\
   git checkout -b "${branchName}" && \\
   make zz_filesystem_generated.go && \\
   git add "${cePomPath}" "${httpPomPath}" zz_filesystem_generated.go && \\
