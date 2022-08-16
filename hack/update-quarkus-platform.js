@@ -1,8 +1,7 @@
 const axios = require('axios')
 const xml2js = require('xml2js');
 const {Octokit} = require("octokit");
-const https = require('https');
-const fs = require('fs/promises');
+const {readFile} = require('fs/promises');
 const {spawn} = require('node:child_process');
 
 const getLatestPlatform = async () => {
@@ -50,7 +49,7 @@ const parseString = (text) => new Promise((resolve, reject) => {
 })
 
 const platformFromPom = async (pomPath) => {
-    const pomData = await fs.readFile(pomPath, {encoding: 'utf8'});
+    const pomData = await readFile(pomPath, {encoding: 'utf8'});
     const pom = await parseString(pomData)
     return pom.project.properties[0]['quarkus.platform.version'][0]
 }
@@ -81,7 +80,7 @@ const prepareBranch = async (branchName, prTitle) => {
 }
 
 const updatePlatformInPom = async (pomPath, newPlatform) => {
-    const pomData = await fs.readFile(pomPath, {encoding: 'utf8'});
+    const pomData = await readFile(pomPath, {encoding: 'utf8'});
     const newPomData = pomData.replace(new RegExp('<quarkus.platform.version>[\\w.]+</quarkus.platform.version>', 'i'),
         `<quarkus.platform.version>${newPlatform}</quarkus.platform.version>`)
     await fs.writeFile(pomPath, newPomData)
