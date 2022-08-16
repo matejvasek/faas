@@ -5,8 +5,9 @@ permissions:
   pull-requests: write
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'
+  #schedule:
+  #  - cron: '*/15 * * * *'
+  pull_request
 
 jobs:
   update:
@@ -14,10 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Setup Babashka
-        run: curl -L -s https://github.com/babashka/babashka/releases/download/v0.9.161/babashka-0.9.161-linux-amd64-static.tar.gz | sudo tar --no-same-owner -zxf - -C /usr/bin/
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 14
+      - name: Install NPM deps.
+        run: npm i xml2js -g && npm i octokit -g
       - name: Create PR
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: bb ./hack/update-quarkus-platform.clj
+        run: node ./hack/update-quarkus-platform.js
 
