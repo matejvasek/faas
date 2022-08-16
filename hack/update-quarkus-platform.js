@@ -1,36 +1,13 @@
-//import {App, Octokit} from "octokit";
-//import xml2js from "xml2js";
-
-
+const axios = require('axios')
 const xml2js = require('xml2js');
-
 const {Octokit} = require("octokit");
 const https = require('https');
 const fs = require('fs/promises');
-const { spawn } = require('node:child_process');
+const {spawn} = require('node:child_process');
 
-const getLatestPlatform = () => {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'code.quarkus.io',
-            port: 443,
-            path: '/api/platforms',
-            method: 'GET',
-        }
-        https.request(options, res => {
-            res.on('error', err => {
-                reject(err)
-            })
-            let chunks = []
-            res.on('data',chunk => {
-                chunks.push(chunk)
-            })
-            res.on('end', () => {
-                const data = JSON.parse(Buffer.concat(chunks).toString())
-                resolve(data.platforms[0].streams[0].releases[0].quarkusCoreVersion)
-            })
-        }).end()
-    });
+const getLatestPlatform = async () => {
+    const resp = await axios.get("https://code.quarkus.io/api/platforms")
+    return resp.data.platforms[0].streams[0].releases[0].quarkusCoreVersion
 }
 
 const octokit = new Octokit({auth: process.env.GITHUB_TOKEN});
@@ -73,7 +50,7 @@ const parseString = (text) => new Promise((resolve, reject) => {
 })
 
 const platformFromPom = async (pomPath) => {
-    const pomData = await fs.readFile(pomPath, { encoding: 'utf8' });
+    const pomData = await fs.readFile(pomPath, {encoding: 'utf8'});
     const pom = await parseString(pomData)
     return pom.project.properties[0]['quarkus.platform.version'][0]
 }
@@ -103,11 +80,11 @@ const prepareBranch = async (branchName, prTitle) => {
     })
 }
 
-const updatePlatformInPom = async(pomPath, newPlatform) => {
-    const pomData = await fs.readFile(pomPath, { encoding: 'utf8' });
-    const newPomDate = pomData.replace(new RegExp('<quarkus.platform.version>[\\w.]+</quarkus.platform.version>', 'i'),
-                    `<quarkus.platform.version>${newPlatform}</quarkus.platform.version>`)
-    await fs.writeFile(pomPath, newPomDate)
+const updatePlatformInPom = async (pomPath, newPlatform) => {
+    const pomData = await fs.readFile(pomPath, {encoding: 'utf8'});
+    const newPomData = pomData.replace(new RegExp('<quarkus.platform.version>[\\w.]+</quarkus.platform.version>', 'i'),
+        `<quarkus.platform.version>${newPlatform}</quarkus.platform.version>`)
+    await fs.writeFile(pomPath, newPomData)
 }
 
 const main = async () => {
@@ -121,7 +98,7 @@ const main = async () => {
         console.log("Quarkus platform is up-to-date!")
         return
     }
-    
+
     if (await prExists(({title}) => title === prTitle)) {
         console.log("The PR already exists!")
         return
