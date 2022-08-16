@@ -1,0 +1,23 @@
+name: Update Quarkus Platform in embedded templates
+
+permissions:
+  contents: write
+  pull-requests: write
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+
+jobs:
+  update:
+    name: Update Quarkus Platform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Babashka
+        run: curl -L -s https://github.com/babashka/babashka/releases/download/v0.9.161/babashka-0.9.161-linux-amd64-static.tar.gz | sudo tar --no-same-owner -zxf - -C /usr/bin/
+      - name: Create PR
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bb ./hack/update-quarkus-platform.clj
+
