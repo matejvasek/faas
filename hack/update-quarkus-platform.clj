@@ -52,7 +52,7 @@
   "Creates branch with updated platform and pushes it."
   [branch-name title]
   (let [script (format "git config user.email \"automation@knative.team\" && \\
-  git config ser.name \"Knative Automation\" && \\
+  git config user.name \"Knative Automation\" && \\
   git checkout -b '%s' && \\
   make zz_filesystem_generated.go && \\
   git add '%s' '%s' zz_filesystem_generated.go && \\
