@@ -98,9 +98,14 @@ clean: clean_templates ## Remove generated artifacts such as binaries and schema
 	rm -f schema/func_yaml-schema.json
 	rm -f coverage.txt
 
-docs:
+.PHONY: bin/docgen
+
+bin/docgen:
+	go build -o bin/docgen docs/generator/main.go
+
+docs: bin/docgen
 	# Generating command reference doc
-	go run docs/generator/main.go
+	./bin/docgen
 
 #############
 ##@ Templates
