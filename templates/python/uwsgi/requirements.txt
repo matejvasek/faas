@@ -1,0 +1,2 @@
+pyuwsgi==2.0.21  # this is just a copy of uwsgi project but it has wheels on PyPI
+Flask==2.2.3
