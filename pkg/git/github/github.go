@@ -11,6 +11,7 @@ import (
 )
 
 func CreateGitHubWebhook(ctx context.Context, repoOwner, repoName, payloadURL, webhookSecret, personalAccessToken string) error {
+	return nil
 	hook := &github.Hook{
 		Name:   github.String("web"),
 		Active: github.Bool(true),

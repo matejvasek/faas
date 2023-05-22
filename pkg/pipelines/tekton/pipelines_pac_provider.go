@@ -217,6 +217,7 @@ func (pp *PipelinesProvider) createRemoteResources(ctx context.Context, f fn.Fun
 	if controllerURL == "" {
 		controllerURL, _ = pac.DetectPACOpenShiftRoute(ctx, installationNS)
 	}
+	controllerURL = "http://pac-ctr.127.0.0.1.sslip.io"
 
 	// we haven't been able to detect PAC controller public route, let's prompt:
 	if controllerURL == "" {
