@@ -12,6 +12,7 @@ import (
 	"github.com/xanzy/go-gitlab"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/html"
+	"k8s.io/apimachinery/pkg/util/uuid"
 	"knative.dev/func/pkg/docker"
 	fn "knative.dev/func/pkg/functions"
 	"knative.dev/func/pkg/pipelines"
@@ -214,6 +215,7 @@ func setup(t *testing.T, host, username, password string) {
 	funcUserPwd := "1ddqd1dkf@"
 	funcGrp := "func-grp-" + randStr
 	funcProj := "func-proj-" + randStr
+	funcImg := fmt.Sprintf("ttl.sh/func/fn-%s:5m", uuid.NewUUID())
 
 	rootToken, err := getAPIToken(host, username, password)
 	if err != nil {
@@ -273,7 +275,7 @@ func setup(t *testing.T, host, username, password string) {
 
 	grpMemOpts := &gitlab.AddGroupMemberOptions{
 		UserID:      p(u.ID),
-		AccessLevel: p(gitlab.DeveloperPermissions),
+		AccessLevel: p(gitlab.MaintainerPermissions),
 	}
 	_, _, err = glabCli.GroupMembers.AddGroupMember(g.ID, grpMemOpts)
 	if err != nil {
@@ -339,16 +341,15 @@ func setup(t *testing.T, host, username, password string) {
 		Name:     funcProj,
 		Runtime:  "test-runtime",
 		Template: "test-template",
-		Registry: "localhost:50000/func",
-		Image:    "localhost:50000/func/fn:latest",
+		Image:    funcImg,
 		Created:  time.Now(),
 		Invoke:   "none",
 		Build: fn.BuildSpec{
 			Git: fn.Git{
-				URL:      proj.HTTPURLToRepo,
+				URL:      strings.TrimSuffix(proj.HTTPURLToRepo, ".git"),
 				Revision: "devel",
 			},
-			BuilderImages: map[string]string{"pack": "gcr.io/paketo-buildpacks/builder:tiny"},
+			BuilderImages: map[string]string{"pack": "docker.io/paketobuildpacks/builder:tiny"},
 			Builder:       "pack",
 			PVCSize:       "256Mi",
 		},
@@ -362,7 +363,7 @@ func setup(t *testing.T, host, username, password string) {
 		t.Fatal(err)
 	}
 
-	err = os.WriteFile(filepath.Join(projDir, "Procfile"), []byte(`web: non-existent-app`), 0644)
+	err = os.WriteFile(filepath.Join(projDir, "Procfile"), []byte("web: non-existent-app\n"), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -417,6 +418,6 @@ func setup(t *testing.T, host, username, password string) {
 }
 
 func TestGitlab(t *testing.T) {
-	setup(t, "gitlab.example.com", "root", "fYsa5ez5ZQTwBp+eCi7saiRHbOO8H3B8J9zVVIQ4zZ4=")
+	setup(t, "gitlab.example.com", "root", "TZj4JFHsxy3jF7F5P5kzQbUByF4SSM6b5F1S58vFGGQ=")
 	t.Log("Setup done!")
 }

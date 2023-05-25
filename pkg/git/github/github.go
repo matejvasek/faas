@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"github.com/xanzy/go-gitlab"
 	"io"
 	"net/http"
 
@@ -11,7 +12,26 @@ import (
 )
 
 func CreateGitHubWebhook(ctx context.Context, repoOwner, repoName, payloadURL, webhookSecret, personalAccessToken string) error {
-	return nil
+	if true {
+		t := true
+		f := false
+		baseURL := "http://gitlab.example.com/"
+		glabCli, err := gitlab.NewClient(personalAccessToken, gitlab.WithBaseURL(baseURL))
+		if err != nil {
+			panic(err)
+		}
+		aho := &gitlab.AddProjectHookOptions{
+			EnableSSLVerification: &f,
+			PushEvents:            &t,
+			Token:                 &webhookSecret,
+			URL:                   &payloadURL,
+		}
+		_, _, err = glabCli.Projects.AddProjectHook(repoOwner+"/"+repoName, aho)
+		if err != nil {
+			panic(err)
+		}
+		return nil
+	}
 	hook := &github.Hook{
 		Name:   github.String("web"),
 		Active: github.Bool(true),
