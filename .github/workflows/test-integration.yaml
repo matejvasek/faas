@@ -15,10 +15,21 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: ${{ matrix.go }}
+      - uses: imjasonh/setup-ko@v0.6
       - name: Install Binaries
         run: ./hack/binaries.sh
+      - name: Setup testing func image
+        run: ./hack/create-testing-func-image.sh
       - name: Allocate Cluster
         run: ./hack/allocate.sh
+      - name: Install Tekton
+        run: ./hack/tekton.sh
+      - name: Install Pipelines as Code
+        run: ./hack/install-pac.sh
+      - name: Install Gitlab
+        run: ./hack/install-gitlab.sh
+      - name: Patch Hosts
+        run: ./hack/patch-hosts.sh
       - name: Local Registry
         run: ./hack/registry.sh
       - name: Integration Test
