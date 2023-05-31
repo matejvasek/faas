@@ -93,7 +93,11 @@ func TestGitlab(t *testing.T) {
 			Password: "",
 		}, nil
 	}
-	pp := tekton.NewPipelinesProvider(tekton.WithCredentialsProvider(credentialsProvider))
+	pp := tekton.NewPipelinesProvider(
+		tekton.WithCredentialsProvider(credentialsProvider),
+		tekton.WithPacURLCallback(func() (string, error) {
+			return "http://pac-ctr.127.0.0.1.sslip.io", nil
+		}))
 
 	metadata := pipelines.PacMetadata{
 		PersonalAccessToken:       glabEnv.UserToken,
@@ -522,7 +526,7 @@ func waitBuildCompletion(t *testing.T, name string) <-chan struct{} {
 		t.Fatal(err)
 	}
 
-	ch := make(chan struct{})
+	ch := make(chan struct{}, 1)
 
 	go func() {
 		defer w.Stop()
@@ -537,6 +541,7 @@ func waitBuildCompletion(t *testing.T, name string) <-chan struct{} {
 			for _, condition := range taskRun.Status.Conditions {
 				if condition.Type == apis.ConditionSucceeded && condition.IsTrue() {
 					ch <- struct{}{}
+					break
 				}
 			}
 		}

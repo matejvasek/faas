@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -14,6 +13,7 @@ import (
 	fn "knative.dev/func/pkg/functions"
 	"knative.dev/func/pkg/git"
 	"knative.dev/func/pkg/git/github"
+	"knative.dev/func/pkg/git/gitlab"
 	"knative.dev/func/pkg/k8s"
 	"knative.dev/func/pkg/pipelines"
 	"knative.dev/func/pkg/pipelines/tekton/pac"
@@ -220,14 +220,17 @@ func (pp *PipelinesProvider) createRemoteResources(ctx context.Context, f fn.Fun
 
 	// we haven't been able to detect PAC controller public route, let's prompt:
 	if controllerURL == "" {
-		if err := survey.AskOne(&survey.Input{
-			Message: "Please enter your Pipelines As Code controller public route URL: ",
-		}, &controllerURL, survey.WithValidator(survey.Required)); err != nil {
+		if controllerURL, err = pp.getPacURL(); err != nil {
 			return err
 		}
 	}
 
-	if err := github.CreateGitHubWebhook(ctx, repoOwner, repoName, controllerURL, metadata.WebhookSecret, metadata.PersonalAccessToken); err != nil {
+	var createWebhook = github.CreateGitHubWebhook
+	if strings.Contains(f.Build.Git.URL, "gitlab") {
+		createWebhook = gitlab.CreateGitLabWebhook
+	}
+
+	if err := createWebhook(ctx, repoOwner, repoName, controllerURL, metadata.WebhookSecret, metadata.PersonalAccessToken); err != nil {
 		// Error: POST https://api.github.com/repos/foobar/test-function/hooks: 422 Validation Failed [{Resource:Hook Field: Code:custom Message:Hook already exists on this repository}]
 		if !strings.Contains(err.Error(), "Hook already exists") {
 			return err
