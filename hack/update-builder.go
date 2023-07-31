@@ -90,7 +90,7 @@ func buildBuilderImage(ctx context.Context) error {
 		return fmt.Errorf("cannot parse reference to builder target: %w", err)
 	}
 	_, err = remote.Head(ref, remote.WithAuth(auth{dockerUser, dockerPassword}))
-	if err == nil {
+	if err == nil && false {
 		fmt.Fprintln(os.Stderr, "The image has been already built.")
 		return nil
 	}
