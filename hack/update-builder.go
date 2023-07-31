@@ -16,6 +16,7 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/oauth2"
 	"golang.org/x/term"
 
 	"github.com/buildpacks/pack/builder"
@@ -60,7 +61,9 @@ func buildBuilderImage(ctx context.Context) error {
 		_ = os.RemoveAll(path)
 	}(buildDir)
 
-	ghClient := github.NewClient(http.DefaultClient)
+	ghClient := github.NewClient(oauth2.NewClient(ctx, oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: os.Getenv("GITHUB_TOKEN"),
+	})))
 	listOpts := &github.ListOptions{Page: 0, PerPage: 1}
 	releases, ghResp, err := ghClient.Repositories.ListReleases(ctx, "paketo-buildpacks", "builder-jammy-full", listOpts)
 	if err != nil {
@@ -78,8 +81,9 @@ func buildBuilderImage(ctx context.Context) error {
 
 	newBuilderImage := "ghcr.io/matejvasek/builder-jammy-full"
 	newBuilderImageTagged := newBuilderImage + ":" + *release.Name
-	dockerUser := os.Getenv("DOCKER_USER")
-	dockerPassword := os.Getenv("DOCKER_PASSWORD")
+	newBuilderImageLatest := newBuilderImage + ":latest"
+	dockerUser := "gh-action"
+	dockerPassword := os.Getenv("GITHUB_TOKEN")
 
 	ref, err := name.ParseReference(newBuilderImageTagged)
 	if err != nil {
@@ -125,7 +129,7 @@ func buildBuilderImage(ctx context.Context) error {
 		return fmt.Errorf("cannot create docker client")
 	}
 
-	err = dockerClient.ImageTag(ctx, newBuilderImageTagged, newBuilderImage+":tip")
+	err = dockerClient.ImageTag(ctx, newBuilderImageTagged, newBuilderImageLatest)
 	if err != nil {
 		return fmt.Errorf("cannot tag latest image: %w", err)
 	}
@@ -160,7 +164,12 @@ func buildBuilderImage(ctx context.Context) error {
 		return nil
 	}
 
-	err = pushImage(newBuilderImage + ":tip")
+	err = pushImage(newBuilderImageTagged)
+	if err != nil {
+		return fmt.Errorf("cannot push the image: %w", err)
+	}
+
+	err = pushImage(newBuilderImageLatest)
 	if err != nil {
 		return fmt.Errorf("cannot push the image: %w", err)
 	}
