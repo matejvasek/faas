@@ -26,6 +26,7 @@ import (
 	"github.com/docker/docker/api/types/registry"
 	docker "github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/jsonmessage"
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-github/v49/github"
@@ -77,12 +78,14 @@ func buildBuilderImage(ctx context.Context) error {
 
 	newBuilderImage := "ghcr.io/matejvasek/builder-jammy-full"
 	newBuilderImageTagged := newBuilderImage + ":" + *release.Name
+	dockerUser := os.Getenv("DOCKER_USER")
+	dockerPassword := os.Getenv("DOCKER_PASSWORD")
 
 	ref, err := name.ParseReference(newBuilderImageTagged)
 	if err != nil {
 		return fmt.Errorf("cannot parse reference to builder target: %w", err)
 	}
-	_, err = remote.Head(ref)
+	_, err = remote.Head(ref, remote.WithAuth(auth{dockerUser, dockerPassword}))
 	if err == nil {
 		fmt.Fprintln(os.Stderr, "The image has been already built.")
 		return nil
@@ -128,8 +131,8 @@ func buildBuilderImage(ctx context.Context) error {
 	}
 
 	authConfig := registry.AuthConfig{
-		Username: os.Getenv("DOCKER_USER"),
-		Password: os.Getenv("DOCKER_PASSWORD"),
+		Username: dockerUser,
+		Password: dockerPassword,
 	}
 	bs, err := json.Marshal(&authConfig)
 	if err != nil {
@@ -163,6 +166,17 @@ func buildBuilderImage(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+type auth struct {
+	uname, pwd string
+}
+
+func (a auth) Authorization() (*authn.AuthConfig, error) {
+	return &authn.AuthConfig{
+		Username: a.uname,
+		Password: a.pwd,
+	}, nil
 }
 
 func downloadBuilderToml(ctx context.Context, tarballUrl, builderTomlPath string) error {
