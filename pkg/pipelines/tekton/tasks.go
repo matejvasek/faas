@@ -146,6 +146,8 @@ spec:
         echo "--> Saving 'func.yaml'"
         cp $func_file /emptyDir/func.yaml
 
+        echo AAAAAAAAAAAAAAAAAA
+        ls -la "$(workspaces.source.path)"
         ############################################
 
       volumeMounts:
@@ -222,6 +224,9 @@ spec:
 
         sed -i "s|^registry:.*$|registry: $(params.REGISTRY)|" "$func_file"
         echo "Function image registry: $(params.REGISTRY)"
+        
+        echo BBBBBBBBBBBBBBB
+        ls -la "$(workspaces.source.path)"
 
         ############################################
       volumeMounts:
