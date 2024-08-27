@@ -58,9 +58,6 @@ const (
             value: git-clone
           - name: version
             value: "0.9"
-      podTemplate:
-        securityContext:
-          fsGroup: 65532
       workspaces:
         - name: output
           workspace: source-workspace`
