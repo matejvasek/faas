@@ -1,8 +1,7 @@
 name: Update builder-jammy-full image
 
 on:
-  schedule:
-    - cron: '0 * * * *'
+  pull_request
 
 jobs:
   build-and-push-image:
