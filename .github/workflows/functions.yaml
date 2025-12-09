@@ -65,7 +65,7 @@ jobs:
           export SOURCE_DATE_EPOCH=0
           docker buildx create --name multiarch --driver docker-container --use
           docker buildx build . -f Dockerfile.utils \
-            --provenance=false \
+            --provenance=false --sbom=false \
             --platform=linux/ppc64le,linux/s390x,linux/amd64,linux/arm64 \
             --push \
             -t "rigel.hopto.me/knative/func-utils:v2" \
