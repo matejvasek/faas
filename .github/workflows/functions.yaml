@@ -2,11 +2,11 @@ name: Functions
 
 # To run this workflow's tests locally, see ./hack/test-full.sh
 
-permissions:
-  id-token: write   # Required for signing
-  contents: read
-  packages: write
-  attestations: write
+#permissions:
+#  id-token: write   # Required for signing
+#  contents: read
+#  packages: write
+#  attestations: write
 
 on:
   push:
