@@ -2,6 +2,12 @@ name: Functions
 
 # To run this workflow's tests locally, see ./hack/test-full.sh
 
+permissions:
+  id-token: write   # Required for signing
+  contents: read
+  packages: write
+  attestations: write
+
 on:
   push:
     branches:
@@ -26,14 +32,11 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build Binaries
-        run: |
-          for a in amd64 arm64 ppc64le s390x; do
-            CGO_ENABLED=0 GOARCH="${a}" go build -o "func-util-$a" -trimpath -ldflags '-w -s' ./cmd/func-util
-          done
-      - name: Debug
-        run: |
-          ls -la .
+#      - name: Build Binaries
+#        run: |
+#          for a in amd64 arm64 ppc64le s390x; do
+#            CGO_ENABLED=0 GOARCH="${a}" go build -o "func-util-$a" -trimpath -ldflags '-w -s' ./cmd/func-util
+#          done
       - name: Build and Push Images
         id: build-images
         uses: docker/build-push-action@v6
@@ -43,8 +46,11 @@ jobs:
           context: '.'
           push: 'true'
           platforms: "linux/ppc64le,linux/s390x,linux/amd64,linux/arm64"
+          annotations: 'index:org.opencontainers.image.description="Knative Func Utils Image",
+                        index:org.opencontainers.image.source="https://github.com/knative/func",
+                        index:org.opencontainers.image.vendor="https://github.com/knative/func",
+                        index:org.opencontainers.image.url="https://github.com/knative/func/pkgs/container/func-utils"'
           provenance: false
-          annotations: 'index:org.opencontainers.image.description="Knative Func Utils Image",index:org.opencontainers.image.source="https://github.com/knative/func",index:org.opencontainers.image.vendor="https://github.com/knative/func",index:org.opencontainers.image.url="https://github.com/knative/func/pkgs/container/func-utils"'
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v3
         with:
