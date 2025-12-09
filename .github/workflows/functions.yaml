@@ -43,10 +43,11 @@ jobs:
         env:
           SOURCE_DATE_EPOCH: 0
         with:
-          tags: "ghcr.io/matejvasek/func-utils:v2"
+          #tags: "ghcr.io/matejvasek/func-utils:v2"
           file: "Dockerfile.utils"
           context: '.'
-          push: 'true'
+          #push: 'true'
+          outputs: type=image,name=ghcr.io/matejvasek/func-utils:v2,push=true,rewrite-timestamp=true
           platforms: "linux/ppc64le,linux/s390x,linux/amd64,linux/arm64"
           annotations: |
             index:org.opencontainers.image.description=Knative Func Utils Image
@@ -54,6 +55,7 @@ jobs:
             index:org.opencontainers.image.vendor=https://github.com/knative/func
             index:org.opencontainers.image.url=https://github.com/knative/func/pkgs/container/func-utils
           provenance: false
+          sbom: false
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v3
         with:
@@ -65,6 +67,7 @@ jobs:
           export SOURCE_DATE_EPOCH=0
           docker buildx create --name multiarch --driver docker-container --use
           docker buildx build . -f Dockerfile.utils \
+            --output type=image,rewrite-timestamp=true \
             --provenance=false --sbom=false \
             --platform=linux/ppc64le,linux/s390x,linux/amd64,linux/arm64 \
             --push \
