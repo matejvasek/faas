@@ -46,7 +46,7 @@ jobs:
             --provenance=false --sbom=false \
             --platform=linux/ppc64le,linux/s390x,linux/amd64,linux/arm64 \
             --push \
-            -t "rigel.hopto.me/knative/func-utils:v2" \
+            -t "ghcr.io/matejvasek/func-utils:v2" \
             --annotation index:org.opencontainers.image.description="Knative Func Utils Image" \
             --annotation index:org.opencontainers.image.source="https://github.com/knative/func" \
             --annotation index:org.opencontainers.image.vendor="https://github.com/knative/func" \
