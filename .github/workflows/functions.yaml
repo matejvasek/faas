@@ -37,32 +37,7 @@ jobs:
 #          for a in amd64 arm64 ppc64le s390x; do
 #            CGO_ENABLED=0 GOARCH="${a}" go build -o "func-util-$a" -trimpath -ldflags '-w -s' ./cmd/func-util
 #          done
-      - name: Build and Push Images
-        id: build-images
-        uses: docker/build-push-action@v6
-        env:
-          SOURCE_DATE_EPOCH: 0
-        with:
-          #tags: "ghcr.io/matejvasek/func-utils:v2"
-          file: "Dockerfile.utils"
-          context: '.'
-          #push: 'true'
-          outputs: type=image,name=ghcr.io/matejvasek/func-utils:v2,push=true,rewrite-timestamp=true
-          platforms: "linux/ppc64le,linux/s390x,linux/amd64,linux/arm64"
-          annotations: |
-            index:org.opencontainers.image.description=Knative Func Utils Image
-            index:org.opencontainers.image.source=https://github.com/knative/func
-            index:org.opencontainers.image.vendor=https://github.com/knative/func
-            index:org.opencontainers.image.url=https://github.com/knative/func/pkgs/container/func-utils
-          provenance: false
-          sbom: false
-      - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@v3
-        with:
-          subject-name: "ghcr.io/matejvasek/func-utils"
-          subject-digest: ${{ steps.build-images.outputs.digest }}
-          push-to-registry: true
-      - name: Test
+      - name: Build Images
         run: |
           export SOURCE_DATE_EPOCH=0
           docker buildx create --name multiarch --driver docker-container --use
@@ -77,3 +52,15 @@ jobs:
             --annotation index:org.opencontainers.image.vendor="https://github.com/knative/func" \
             --annotation index:org.opencontainers.image.url="https://github.com/knative/func/pkgs/container/func-utils" \
             --metadata-file build-metadata.json
+      - name: Get Image Digest
+        id: get-digest
+        run: |
+          DIGEST=$(jq -r '."containerimage.digest"' build-metadata.json)
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+          echo "Detected Digest: $DIGEST"
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-name: "ghcr.io/matejvasek/func-utils"
+          subject-digest: ${{ steps.get-digest.outputs.digest }}
+          push-to-registry: true
