@@ -137,7 +137,6 @@ jobs:
   # -----------------
   test-integration:
     name: Integration Tests
-    needs: precheck
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -158,6 +157,11 @@ jobs:
           remove_haskell: true
           remove_swap: true
           rm_cmd: "rmz" # Faster than rm
+
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
 
       - name: Install Binaries
         run: ./hack/binaries.sh
@@ -201,7 +205,7 @@ jobs:
   # Runs Core, Metadata, and Remote
   test-e2e:
     name: E2E - Core, Metadata, and Remote
-    needs: precheck
+    needs: test-integration
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -218,6 +222,11 @@ jobs:
           remove_haskell: true
           remove_swap: true
           rm_cmd: "rmz" # Faster than rm
+
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
 
       - name: Install Binaries
         run: ./hack/binaries.sh
@@ -256,9 +265,10 @@ jobs:
   # ----------------
   test-e2e-podman:
     name: E2E - Podman
-    needs: precheck
+    needs: test-e2e
     timeout-minutes: 120
     strategy:
+      max-parallel: 1
       matrix:
         os:
           - "ubuntu-latest" # x86_64
@@ -280,6 +290,11 @@ jobs:
           remove_haskell: true
           remove_swap: true
           rm_cmd: "rmz" # Faster than rm
+
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
 
       - name: Start Podman
         run: sudo apt update && sudo apt install -y podman && podman system service --time=0 &
@@ -319,8 +334,9 @@ jobs:
   # -----------------
   test-e2e-runtimes:
     name: E2E - Runtimes
-    needs: precheck
+    needs: test-e2e-podman
     strategy:
+      max-parallel: 1
       matrix:
         runtime:
           - "go"
@@ -371,6 +387,11 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
       # Allocate Cluster
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
+
       - name: Install Binaries
         run: ./hack/binaries.sh
       - name: Allocate Cluster
@@ -409,7 +430,7 @@ jobs:
   # -------------------
   test-e2e-config-ci:
     name: E2E - Config CI GitHub Workflows
-    needs: precheck
+    needs: test-e2e-runtimes
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -426,6 +447,11 @@ jobs:
           remove_haskell: true
           remove_swap: true
           rm_cmd: "rmz"
+
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
 
       - name: Install Binaries
         run: ./hack/binaries.sh
