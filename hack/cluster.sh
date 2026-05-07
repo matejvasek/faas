@@ -99,6 +99,12 @@ allocate_cluster() {
   # Configure magic DNS for localtest.me after all services are up
   magic_dns
 
+  # Verify connectivity to the cluster via port-forwarded ingress
+  echo "${blue}Verifying cluster connectivity...${reset}"
+  curl -sf --max-time 10 http://pac-ctr.localtest.me > /dev/null \
+    && echo "${green}✅ Cluster connectivity OK${reset}" \
+    || echo "${red}⚠ WARNING: Could not reach pac-ctr.localtest.me${reset}"
+
   next_steps
 
   echo -e "\n${green}🎉 DONE${reset}\n"
