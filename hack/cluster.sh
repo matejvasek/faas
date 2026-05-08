@@ -111,6 +111,31 @@ allocate_cluster() {
 }
 
 kubernetes() {
+  # Pre-create the Kind network as IPv6-only.
+  # - Podman: creating a network with only an IPv6 subnet makes it IPv6-only.
+  # - Docker 29+: --ipv4=false creates a truly IPv6-only network.
+  # - Docker <29: --ipv4=false is not supported, so we fall back to a
+  #   dual-stack network. CoreDNS is patched later in magic_dns() to forward
+  #   to the IPv6 gateway instead of /etc/resolv.conf (which would contain
+  #   an unreachable IPv4 nameserver).
+  if [ "$CONTAINER_ENGINE" == "podman" ]; then
+    $CONTAINER_ENGINE network create \
+      --subnet fd00:dead:beef::/64 \
+      --gateway fd00:dead:beef::1 \
+      kind 2>/dev/null || true
+  else
+    $CONTAINER_ENGINE network create \
+      --ipv6 --ipv4=false \
+      --subnet fd00:dead:beef::/64 \
+      --gateway fd00:dead:beef::1 \
+      kind 2>/dev/null \
+    || $CONTAINER_ENGINE network create \
+      --ipv6 \
+      --subnet fd00:dead:beef::/64 \
+      --gateway fd00:dead:beef::1 \
+      kind 2>/dev/null || true
+  fi
+
   cat <<EOF | $KIND create cluster --name=func --kubeconfig="${KUBECONFIG}" --wait=60s --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
