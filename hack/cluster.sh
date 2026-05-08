@@ -640,28 +640,6 @@ localtest.me.            IN      AAAA    ${cluster_node_addr6}\n\
 *.localtest.me.          IN      AAAA    ${cluster_node_addr6}\n"
   fi
 
-  # Determine the DNS upstream for CoreDNS forwarding.
-  # On IPv6-only clusters (ipFamily: ipv6) CoreDNS pods only have IPv6
-  # addresses, but /etc/resolv.conf inside the Kind node may contain an
-  # IPv4 nameserver (e.g. 172.18.0.1) that CoreDNS cannot reach, causing
-  # all external DNS lookups to fail with "network is unreachable".
-  # When the node only has an IPv4 nameserver, replace the node's
-  # resolv.conf with IPv6 nameservers from the host.
-  if [[ -n $cluster_node_addr6 ]]; then
-    local node_ns
-    node_ns="$($CONTAINER_ENGINE exec func-control-plane awk '/^nameserver/{print $2; exit}' /etc/resolv.conf)"
-    if [[ -n $node_ns && $node_ns != *:* ]]; then
-      # Node has IPv4-only DNS — gather IPv6 nameservers from the host.
-      # Use grep to extract IPv6 addresses (contain ':') from resolv.conf.
-      local v6_nameservers
-      v6_nameservers="$(awk '/^nameserver/ && $2 ~ /:/' /etc/resolv.conf)"
-      if [[ -n $v6_nameservers ]]; then
-        echo "Patching Kind node resolv.conf with IPv6 nameservers"
-        $CONTAINER_ENGINE exec func-control-plane \
-          sh -c "printf '%s\n' '${v6_nameservers}' > /etc/resolv.conf"
-      fi
-    fi
-  fi
 
   $KUBECTL patch cm/coredns -n kube-system --patch-file /dev/stdin <<EOF
 {
