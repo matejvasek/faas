@@ -645,20 +645,28 @@ localtest.me.            IN      AAAA    ${cluster_node_addr6}\n\
   # addresses, but /etc/resolv.conf inside the Kind node may contain an
   # IPv4 nameserver (e.g. 172.18.0.1) that CoreDNS cannot reach, causing
   # all external DNS lookups to fail with "network is unreachable".
-  # Forward to the container network's IPv6 gateway (aardvark-dns) instead.
-  local dns_upstream="/etc/resolv.conf"
+  # When the node only has an IPv4 nameserver, replace the node's
+  # resolv.conf with IPv6 nameservers from the host.
   if [[ -n $cluster_node_addr6 ]]; then
-    local gw6
-    gw6="$($CONTAINER_ENGINE container inspect func-control-plane | jq -r ".[0].NetworkSettings.Networks.kind.IPv6Gateway")"
-    if [[ -n $gw6 ]]; then
-      dns_upstream="$gw6"
+    local node_ns
+    node_ns="$($CONTAINER_ENGINE exec func-control-plane awk '/^nameserver/{print $2; exit}' /etc/resolv.conf)"
+    if [[ -n $node_ns && $node_ns != *:* ]]; then
+      # Node has IPv4-only DNS — gather IPv6 nameservers from the host.
+      # Use grep to extract IPv6 addresses (contain ':') from resolv.conf.
+      local v6_nameservers
+      v6_nameservers="$(awk '/^nameserver/ && $2 ~ /:/' /etc/resolv.conf)"
+      if [[ -n $v6_nameservers ]]; then
+        echo "Patching Kind node resolv.conf with IPv6 nameservers"
+        $CONTAINER_ENGINE exec func-control-plane \
+          sh -c "printf '%s\n' '${v6_nameservers}' > /etc/resolv.conf"
+      fi
     fi
   fi
 
   $KUBECTL patch cm/coredns -n kube-system --patch-file /dev/stdin <<EOF
 {
   "data": {
-    "Corefile": ".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    file /etc/coredns/example.db localtest.me\n    prometheus :9153\n    forward . ${dns_upstream} {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}\n",
+    "Corefile": ".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    file /etc/coredns/example.db localtest.me\n    prometheus :9153\n    forward . /etc/resolv.conf {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}\n",
     "example.db": "; localtest.me test file\n\
 localtest.me.            IN      SOA     sns.dns.icann.org. noc.dns.icann.org. 2015082541 7200 3600 1209600 3600\n\
 $a_recs\
