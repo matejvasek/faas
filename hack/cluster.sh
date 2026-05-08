@@ -79,7 +79,6 @@ allocate_cluster() {
   echo "svr:  Serving, DNS and Networking"
   echo "evt:  Eventing and Namespace"
   echo "reg:  Local Registry"
-  echo "dpr:  Dapr Runtime"
   echo "tkt:  Tekton Pipelines"
   echo "keda: Keda"
   echo ""
@@ -87,7 +86,8 @@ allocate_cluster() {
   ( set -o pipefail; (serving && dns && networking) 2>&1 | sed  -e 's/^/svr /')&
   ( set -o pipefail; (eventing && namespace) 2>&1 | sed  -e 's/^/evt /')&
   ( set -o pipefail; registry 2>&1 | sed  -e 's/^/reg /') &
-  ( set -o pipefail; dapr_runtime 2>&1 | sed  -e 's/^/dpr /')&
+  # Dapr does not support IPv6-only clusters: https://github.com/dapr/dapr/issues/5971
+  #( set -o pipefail; dapr_runtime 2>&1 | sed  -e 's/^/dpr /')&
   ( set -o pipefail; (tekton && pac) 2>&1 | sed  -e 's/^/tkt /')&
   ( set -o pipefail; (keda && keda_http_addon) 2>&1 | sed  -e 's/^/keda /')&
 
