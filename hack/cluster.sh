@@ -641,12 +641,13 @@ localtest.me.            IN      AAAA    ${cluster_node_addr6}\n\
   fi
 
   # Determine the DNS upstream for CoreDNS forwarding.
-  # On IPv6-only clusters /etc/resolv.conf inside the Kind node may contain
-  # an IPv4 nameserver (e.g. 172.18.0.1) that is unreachable, causing all
-  # external DNS lookups to fail with "network is unreachable".  In that case
-  # forward to the container network's IPv6 gateway instead.
+  # On IPv6-only clusters (ipFamily: ipv6) CoreDNS pods only have IPv6
+  # addresses, but /etc/resolv.conf inside the Kind node may contain an
+  # IPv4 nameserver (e.g. 172.18.0.1) that CoreDNS cannot reach, causing
+  # all external DNS lookups to fail with "network is unreachable".
+  # Forward to the container network's IPv6 gateway (aardvark-dns) instead.
   local dns_upstream="/etc/resolv.conf"
-  if [[ -z $cluster_node_addr && -n $cluster_node_addr6 ]]; then
+  if [[ -n $cluster_node_addr6 ]]; then
     local gw6
     gw6="$($CONTAINER_ENGINE container inspect func-control-plane | jq -r ".[0].NetworkSettings.Networks.kind.IPv6Gateway")"
     if [[ -n $gw6 ]]; then
