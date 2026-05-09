@@ -654,23 +654,10 @@ localtest.me.            IN      AAAA    ${cluster_node_addr6}\n\
 *.localtest.me.          IN      AAAA    ${cluster_node_addr6}\n"
   fi
 
-  # Determine the DNS forwarder for CoreDNS.
-  # The cluster is IPv6-only (ipFamily: ipv6), so CoreDNS pods only have IPv6
-  # addresses. If the node's /etc/resolv.conf contains only IPv4 nameservers
-  # (e.g. 172.18.0.1 on Docker), CoreDNS cannot reach them. Detect this and
-  # fall back to public IPv6 DNS (Cloudflare + Google).
-  local dns_forward="forward . /etc/resolv.conf"
-  local node_resolv
-  node_resolv="$($CONTAINER_ENGINE exec func-control-plane cat /etc/resolv.conf 2>/dev/null || true)"
-  if ! echo "$node_resolv" | grep -qE 'nameserver\s+[0-9a-fA-F]*:'; then
-    echo "Node has no IPv6 nameservers — using public DNS64 for CoreDNS"
-    dns_forward="forward . 2606:4700:4700::64 2001:4860:4860::6464"
-  fi
-
   $KUBECTL patch cm/coredns -n kube-system --patch-file /dev/stdin <<EOF
 {
   "data": {
-    "Corefile": ".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    file /etc/coredns/example.db localtest.me\n    prometheus :9153\n    ${dns_forward} {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}\n",
+    "Corefile": ".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    file /etc/coredns/example.db localtest.me\n    prometheus :9153\n    forward . /etc/resolv.conf {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}\n",
     "example.db": "; localtest.me test file\n\
 localtest.me.            IN      SOA     sns.dns.icann.org. noc.dns.icann.org. 2015082541 7200 3600 1209600 3600\n\
 $a_recs\
