@@ -81,9 +81,5 @@ func GenerateDaprAnnotations(appID string) map[string]string {
 	aa["dapr.io/metrics-port"] = DaprMetricsPort
 	aa["dapr.io/app-port"] = "8080"
 	aa["dapr.io/enable-api-logging"] = DaprEnableAPILogging
-	// Workaround for Dapr on IPv6-only clusters: GetHostAddress() only
-	// auto-detects IPv4 addresses, causing daprd to crash. Setting
-	// DAPR_HOST_IP to the IPv6 loopback prevents the crash.
-	aa["dapr.io/env"] = "DAPR_HOST_IP=::1"
 	return aa
 }
