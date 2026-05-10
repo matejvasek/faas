@@ -170,13 +170,31 @@ jobs:
 
       - name: Debug IPv6 Connectivity
         run: |
+          echo "=== CI host: IPv6 routes ==="
+          ip -6 route show default
+          ip -6 route get 64:ff9b::8c52:7903
+          echo "=== CI host: IPv6 forwarding ==="
+          sysctl net.ipv6.conf.all.forwarding
+          echo "=== CI host: ip6tables NAT ==="
+          sudo ip6tables -t nat -L -n -v 2>/dev/null | head -30 || echo "no ip6tables"
+          echo "=== CI host: WG status ==="
+          sudo wg show 2>/dev/null || echo "no wg"
+          echo "=== CI host: interfaces ==="
+          ip -6 addr show scope global
+          echo "=== Kind node: IPv6 routes ==="
+          docker exec func-control-plane ip -6 route
+          echo "=== Kind node: IPv6 forwarding ==="
+          docker exec func-control-plane sysctl net.ipv6.conf.all.forwarding
+          echo "=== Kind node: traceroute to NAT64 addr ==="
+          docker exec func-control-plane bash -c "apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq traceroute >/dev/null 2>&1; traceroute6 -n -m 5 -w 2 64:ff9b::8c52:7903" || true
+          echo "=== Pod: connectivity test ==="
           kubectl run -i --rm debug --image=alpine --restart=Never -- sh -c '
             apk add -q curl bind-tools
             echo "=== DNS for github.com ==="
             dig github.com A +short
             dig github.com AAAA +short
-            echo "=== Network interfaces ==="
-            ip addr
+            echo "=== Pod: routes ==="
+            ip -6 route
             echo "=== curl github.com ==="
             curl -v --max-time 10 https://github.com 2>&1 | head -25
             echo "=== curl registry ==="
@@ -238,13 +256,31 @@ jobs:
 
       - name: Debug IPv6 Connectivity
         run: |
+          echo "=== CI host: IPv6 routes ==="
+          ip -6 route show default
+          ip -6 route get 64:ff9b::8c52:7903
+          echo "=== CI host: IPv6 forwarding ==="
+          sysctl net.ipv6.conf.all.forwarding
+          echo "=== CI host: ip6tables NAT ==="
+          sudo ip6tables -t nat -L -n -v 2>/dev/null | head -30 || echo "no ip6tables"
+          echo "=== CI host: WG status ==="
+          sudo wg show 2>/dev/null || echo "no wg"
+          echo "=== CI host: interfaces ==="
+          ip -6 addr show scope global
+          echo "=== Kind node: IPv6 routes ==="
+          docker exec func-control-plane ip -6 route
+          echo "=== Kind node: IPv6 forwarding ==="
+          docker exec func-control-plane sysctl net.ipv6.conf.all.forwarding
+          echo "=== Kind node: traceroute to NAT64 addr ==="
+          docker exec func-control-plane bash -c "apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq traceroute >/dev/null 2>&1; traceroute6 -n -m 5 -w 2 64:ff9b::8c52:7903" || true
+          echo "=== Pod: connectivity test ==="
           kubectl run -i --rm debug --image=alpine --restart=Never -- sh -c '
             apk add -q curl bind-tools
             echo "=== DNS for github.com ==="
             dig github.com A +short
             dig github.com AAAA +short
-            echo "=== Network interfaces ==="
-            ip addr
+            echo "=== Pod: routes ==="
+            ip -6 route
             echo "=== curl github.com ==="
             curl -v --max-time 10 https://github.com 2>&1 | head -25
             echo "=== curl registry ==="
