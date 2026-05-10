@@ -43,4 +43,12 @@ chmod 600 /etc/wireguard/wg0.conf
 echo "Bringing up wg0..."
 wg-quick up wg0
 
+# Clamp TCP MSS to match path MTU. Without this, PMTUD fails because
+# ICMPv6 Packet Too Big messages for pod addresses (fd00:10:244::/64)
+# get misrouted via the default route (wg0) instead of back through the
+# Docker bridge to the pod — the CI host has no specific route for the
+# Kubernetes pod CIDR.
+echo "Setting up TCP MSS clamping..."
+ip6tables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+
 echo "WireGuard setup complete."
