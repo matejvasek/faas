@@ -310,13 +310,7 @@ jobs:
     name: E2E - Podman
     needs: test-e2e
     timeout-minutes: 120
-    strategy:
-      max-parallel: 1
-      matrix:
-        os:
-          - "ubuntu-latest" # x86_64
-          - "ubuntu-24.04-arm" # ARM64
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     env:
       FUNC_CLUSTER_RETRIES: 5
       FUNC_E2E_PODMAN: true
@@ -360,7 +354,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cluster-logs-${{ matrix.os }}-podman
+          name: cluster-logs-podman
           path: ./cluster_log.txt
           retention-days: 7
 
