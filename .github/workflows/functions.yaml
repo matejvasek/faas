@@ -229,6 +229,7 @@ jobs:
       FUNC_CLUSTER_RETRIES: 5
       FUNC_E2E_CLEAN: false # cluster only used once
       FUNC_E2E_VERBOSE: true
+      KUBECONFIG: ${{github.workspace}}/hack/bin/kubeconfig.yaml
     steps:
       - uses: actions/checkout@v4
       - uses: knative/actions/setup-go@main
