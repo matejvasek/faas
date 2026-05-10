@@ -136,6 +136,10 @@ EOF
   sudo sysctl -w net.ipv4.ip_forward=1
   sudo sysctl -w net.ipv6.conf.all.forwarding=1
 
+  # Allow forwarding through the NAT64 TUN device (Docker sets FORWARD policy to DROP)
+  sudo iptables -A FORWARD -i ${TAYGA_DEV} -j ACCEPT
+  sudo iptables -A FORWARD -o ${TAYGA_DEV} -j ACCEPT
+
   # NAT the TAYGA pool so translated packets can reach the internet
   sudo iptables -t nat -A POSTROUTING -s ${TAYGA_POOL} -j MASQUERADE
 
