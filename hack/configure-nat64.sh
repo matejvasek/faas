@@ -143,10 +143,33 @@ EOF
   # NAT the TAYGA pool so translated packets can reach the internet
   sudo iptables -t nat -A POSTROUTING -s ${TAYGA_POOL} -j MASQUERADE
 
-  # Start TAYGA
-  sudo tayga
+  # Start TAYGA in foreground mode (background job) so errors are visible
+  sudo tayga -d &
+  sleep 1
+  if ! pgrep -x tayga > /dev/null; then
+    echo "${red}TAYGA failed to start${reset}"
+    exit 1
+  fi
+  echo "TAYGA running (PID: $(pgrep -x tayga))"
 
   echo "${green}TAYGA configured${reset}"
+}
+
+dump_diagnostics() {
+  echo "${yellow}--- NAT64 Diagnostics ---${reset}"
+  echo "TAYGA process:"
+  pgrep -a tayga || echo "  NOT RUNNING"
+  echo "nat64 interface:"
+  ip addr show ${TAYGA_DEV} 2>&1 || true
+  echo "IPv6 routes:"
+  ip -6 route show 2>&1
+  echo "IPv4 routes:"
+  ip -4 route show 2>&1
+  echo "iptables FORWARD chain:"
+  sudo iptables -S FORWARD 2>&1 || true
+  echo "iptables NAT POSTROUTING:"
+  sudo iptables -t nat -S POSTROUTING 2>&1 || true
+  echo "${yellow}--- End Diagnostics ---${reset}"
 }
 
 verify() {
@@ -158,16 +181,18 @@ verify() {
   if [[ "${aaaa}" != *"64:ff9b::"* ]]; then
     echo "${red}DNS64 verification failed: expected 64:ff9b:: prefix in AAAA record${reset}"
     echo "Got: ${aaaa}"
+    dump_diagnostics
     exit 1
   fi
   echo "DNS64 OK: github.com -> ${aaaa}"
 
-  # Verify NAT64 connectivity
-  if ! curl -6 --max-time 10 -sSf -o /dev/null https://github.com; then
-    echo "${red}NAT64 verification failed: cannot reach github.com over IPv6${reset}"
+  # Verify NAT64 connectivity with ping first (simpler than curl, no TLS)
+  if ! ping -6 -c 3 -W 5 ghcr.io; then
+    echo "${red}NAT64 verification failed: cannot ping ghcr.io over IPv6${reset}"
+    dump_diagnostics
     exit 1
   fi
-  echo "NAT64 OK: curl -6 github.com succeeded"
+  echo "NAT64 OK: ping -6 ghcr.io succeeded"
 }
 
 main "$@"
