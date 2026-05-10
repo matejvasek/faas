@@ -168,6 +168,21 @@ jobs:
       - name: Install Git Server
         run: ./hack/git-server.sh
 
+      - name: Debug IPv6 Connectivity
+        run: |
+          kubectl run -i --rm debug --image=alpine --restart=Never -- sh -c '
+            apk add -q curl bind-tools
+            echo "=== DNS for github.com ==="
+            dig github.com A +short
+            dig github.com AAAA +short
+            echo "=== Network interfaces ==="
+            ip addr
+            echo "=== curl github.com ==="
+            curl -v --max-time 10 https://github.com 2>&1 | head -25
+            echo "=== curl registry ==="
+            curl -v --max-time 5 http://func-registry:5000/v2/ 2>&1 | head -15
+          '
+
       - name: Run Integration Tests
         run: make test-integration
 
@@ -220,6 +235,21 @@ jobs:
         run: ./hack/registry.sh
       - name: Prepare Images
         run: ./hack/images.sh
+
+      - name: Debug IPv6 Connectivity
+        run: |
+          kubectl run -i --rm debug --image=alpine --restart=Never -- sh -c '
+            apk add -q curl bind-tools
+            echo "=== DNS for github.com ==="
+            dig github.com A +short
+            dig github.com AAAA +short
+            echo "=== Network interfaces ==="
+            ip addr
+            echo "=== curl github.com ==="
+            curl -v --max-time 10 https://github.com 2>&1 | head -25
+            echo "=== curl registry ==="
+            curl -v --max-time 5 http://func-registry:5000/v2/ 2>&1 | head -15
+          '
 
       - name: Run Basic E2E Tests (core, metadata, remote)
         run: make test-e2e
