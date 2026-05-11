@@ -453,25 +453,9 @@ dapr_runtime() {
     dapr_flags="--image-registry=ghcr.io/dapr --log-as-json"
   fi
 
-  # Install Dapr Runtime (without --wait: the scheduler will crash on IPv6-only
-  # clusters until patched below, causing --wait to time out)
+  # Install Dapr Runtime
   # shellcheck disable=SC2086
-  $DAPR init ${dapr_flags} --kubernetes
-
-  # Patch Dapr control plane for IPv6-only clusters: the GetHostAddress()
-  # function in Dapr only auto-detects IPv4 addresses. Inject DAPR_HOST_IP
-  # from the downward API so each pod reports its actual (IPv6) address.
-  sleep 5
-  $KUBECTL wait deployment --for=condition=Available -n dapr-system --all --timeout=2m || true
-  local dapr_host_ip_env='[{"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}}}]'
-  for deploy in dapr-operator dapr-sentry dapr-sidecar-injector; do
-    $KUBECTL patch deployment "$deploy" -n dapr-system --type=json -p="$dapr_host_ip_env"
-  done
-  $KUBECTL patch statefulset dapr-scheduler-server -n dapr-system --type=json -p="$dapr_host_ip_env"
-  $KUBECTL patch statefulset dapr-placement-server -n dapr-system --type=json -p="$dapr_host_ip_env"
-
-  sleep 5
-  $KUBECTL wait pod --for=condition=Ready -l '!job-name' -n dapr-system --timeout=5m
+  $DAPR init ${dapr_flags} --kubernetes --wait
 
   # Enalble Redis Persistence and Pub/Sub
   #
