@@ -77,14 +77,6 @@ jobs:
       - name: Run Unit Tests
         run: make test
 
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: unit ${{ matrix.os }}
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
-
   # --------------
   # TEMPLATE TESTS
   # --------------
@@ -137,7 +129,6 @@ jobs:
   # -----------------
   test-integration:
     name: Integration Tests
-    needs: precheck
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -159,6 +150,11 @@ jobs:
           remove_swap: true
           rm_cmd: "rmz" # Faster than rm
 
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
+
       - name: Install Binaries
         run: ./hack/binaries.sh
       - name: Allocate Cluster
@@ -172,16 +168,41 @@ jobs:
       - name: Install Git Server
         run: ./hack/git-server.sh
 
+      - name: Debug IPv6 Connectivity
+        run: |
+          echo "=== CI host: IPv6 routes ==="
+          ip -6 route show default
+          ip -6 route get 64:ff9b::8c52:7903
+          echo "=== CI host: IPv6 forwarding ==="
+          sysctl net.ipv6.conf.all.forwarding
+          echo "=== CI host: ip6tables NAT ==="
+          sudo ip6tables -t nat -L -n -v 2>/dev/null | head -30 || echo "no ip6tables"
+          echo "=== CI host: WG status ==="
+          sudo wg show 2>/dev/null || echo "no wg"
+          echo "=== CI host: interfaces ==="
+          ip -6 addr show scope global
+          echo "=== Kind node: IPv6 routes ==="
+          docker exec func-control-plane ip -6 route
+          echo "=== Kind node: IPv6 forwarding ==="
+          docker exec func-control-plane sysctl net.ipv6.conf.all.forwarding
+          echo "=== Kind node: traceroute to NAT64 addr ==="
+          docker exec func-control-plane bash -c "apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq traceroute >/dev/null 2>&1; traceroute6 -n -m 5 -w 2 64:ff9b::8c52:7903" || true
+          echo "=== Pod: connectivity test ==="
+          kubectl run -i --rm debug --image=alpine --restart=Never -- sh -c '
+            apk add -q curl bind-tools
+            echo "=== DNS for github.com ==="
+            dig github.com A +short
+            dig github.com AAAA +short
+            echo "=== Pod: routes ==="
+            ip -6 route
+            echo "=== curl github.com ==="
+            curl -v --max-time 10 https://github.com 2>&1 | head -25
+            echo "=== curl registry ==="
+            curl -v --max-time 5 http://func-registry:5000/v2/ 2>&1 | head -15
+          '
+
       - name: Run Integration Tests
         run: make test-integration
-
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: integration
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs
@@ -201,13 +222,14 @@ jobs:
   # Runs Core, Metadata, and Remote
   test-e2e:
     name: E2E - Core, Metadata, and Remote
-    needs: precheck
+    needs: test-integration
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       FUNC_CLUSTER_RETRIES: 5
       FUNC_E2E_CLEAN: false # cluster only used once
       FUNC_E2E_VERBOSE: true
+      KUBECONFIG: ${{github.workspace}}/hack/bin/kubeconfig.yaml
     steps:
       - uses: actions/checkout@v4
       - uses: knative/actions/setup-go@main
@@ -219,6 +241,11 @@ jobs:
           remove_swap: true
           rm_cmd: "rmz" # Faster than rm
 
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
+
       - name: Install Binaries
         run: ./hack/binaries.sh
       - name: Allocate Cluster
@@ -228,16 +255,41 @@ jobs:
       - name: Prepare Images
         run: ./hack/images.sh
 
+      - name: Debug IPv6 Connectivity
+        run: |
+          echo "=== CI host: IPv6 routes ==="
+          ip -6 route show default
+          ip -6 route get 64:ff9b::8c52:7903
+          echo "=== CI host: IPv6 forwarding ==="
+          sysctl net.ipv6.conf.all.forwarding
+          echo "=== CI host: ip6tables NAT ==="
+          sudo ip6tables -t nat -L -n -v 2>/dev/null | head -30 || echo "no ip6tables"
+          echo "=== CI host: WG status ==="
+          sudo wg show 2>/dev/null || echo "no wg"
+          echo "=== CI host: interfaces ==="
+          ip -6 addr show scope global
+          echo "=== Kind node: IPv6 routes ==="
+          docker exec func-control-plane ip -6 route
+          echo "=== Kind node: IPv6 forwarding ==="
+          docker exec func-control-plane sysctl net.ipv6.conf.all.forwarding
+          echo "=== Kind node: traceroute to NAT64 addr ==="
+          docker exec func-control-plane bash -c "apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq traceroute >/dev/null 2>&1; traceroute6 -n -m 5 -w 2 64:ff9b::8c52:7903" || true
+          echo "=== Pod: connectivity test ==="
+          kubectl run -i --rm debug --image=alpine --restart=Never -- sh -c '
+            apk add -q curl bind-tools
+            echo "=== DNS for github.com ==="
+            dig github.com A +short
+            dig github.com AAAA +short
+            echo "=== Pod: routes ==="
+            ip -6 route
+            echo "=== curl github.com ==="
+            curl -v --max-time 10 https://github.com 2>&1 | head -25
+            echo "=== curl registry ==="
+            curl -v --max-time 5 http://func-registry:5000/v2/ 2>&1 | head -15
+          '
+
       - name: Run Basic E2E Tests (core, metadata, remote)
         run: make test-e2e
-
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: e2e
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs
@@ -256,9 +308,11 @@ jobs:
   # ----------------
   test-e2e-podman:
     name: E2E - Podman
-    needs: precheck
+    needs: test-e2e
     timeout-minutes: 120
     strategy:
+      fail-fast: false
+      max-parallel: 1
       matrix:
         os:
           - "ubuntu-latest" # x86_64
@@ -281,6 +335,11 @@ jobs:
           remove_swap: true
           rm_cmd: "rmz" # Faster than rm
 
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
+
       - name: Start Podman
         run: sudo apt update && sudo apt install -y podman && podman system service --time=0 &
 
@@ -293,14 +352,6 @@ jobs:
 
       - name: Run E2E Podman Tests
         run: make test-e2e-podman
-
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: e2e
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs
@@ -319,8 +370,10 @@ jobs:
   # -----------------
   test-e2e-runtimes:
     name: E2E - Runtimes
-    needs: precheck
+    needs: test-e2e-podman
     strategy:
+      fail-fast: false
+      max-parallel: 1
       matrix:
         runtime:
           - "go"
@@ -371,6 +424,11 @@ jobs:
         uses: actions-rust-lang/setup-rust-toolchain@v1
 
       # Allocate Cluster
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
+
       - name: Install Binaries
         run: ./hack/binaries.sh
       - name: Allocate Cluster
@@ -382,15 +440,6 @@ jobs:
 
       - name: Run Test - ${{ matrix.runtime }}
         run: make test-e2e-matrix
-
-      # Coverage and Logs
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: e2e ${{ matrix.runtime }}
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs
@@ -409,7 +458,7 @@ jobs:
   # -------------------
   test-e2e-config-ci:
     name: E2E - Config CI GitHub Workflows
-    needs: precheck
+    needs: test-e2e-runtimes
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -427,6 +476,11 @@ jobs:
           remove_swap: true
           rm_cmd: "rmz"
 
+      - name: Setup WireGuard for IPv6
+        env:
+          WG_CONFIG: ${{ secrets.WG_CONFIG }}
+        run: sudo -E ./hack/wg-setup.sh
+
       - name: Install Binaries
         run: ./hack/binaries.sh
       - name: Allocate Cluster
@@ -438,14 +492,6 @@ jobs:
 
       - name: Run Config CI E2E Tests
         run: make test-e2e-config-ci
-
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: e2e-config-ci
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs

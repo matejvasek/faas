@@ -99,28 +99,52 @@ allocate_cluster() {
   # Configure magic DNS for localtest.me after all services are up
   magic_dns
 
+  # Verify connectivity to the cluster via port-forwarded ingress
+  echo "${blue}Verifying cluster connectivity...${reset}"
+  curl -sf --max-time 10 http://pac-ctr.localtest.me > /dev/null \
+    && echo "${green}✅ Cluster connectivity OK${reset}" \
+    || echo "${red}⚠ WARNING: Could not reach pac-ctr.localtest.me${reset}"
+
   next_steps
 
   echo -e "\n${green}🎉 DONE${reset}\n"
 }
 
 kubernetes() {
+  # Pre-create the Kind network as IPv6-only so the Kind node gets an IPv6
+  # nameserver in /etc/resolv.conf.
+  # - Podman: specifying only an IPv6 subnet makes the network IPv6-only
+  #   and aardvark-dns provides a working IPv6 nameserver automatically.
+  # - Docker: pre-creating the network breaks Kind's node boot, so we let
+  #   Kind create it. The DNS fixup in magic_dns() handles the resulting
+  #   IPv4-only nameserver problem.
+  if [ "$CONTAINER_ENGINE" == "podman" ]; then
+    $CONTAINER_ENGINE network create \
+      --subnet fd00:dead:beef::/64 \
+      --gateway fd00:dead:beef::1 \
+      kind 2>/dev/null || true
+  fi
+
   cat <<EOF | $KIND create cluster --name=func --kubeconfig="${KUBECONFIG}" --wait=60s --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  apiServerAddress: "::1"
+  apiServerPort: 6443
+  ipFamily: ipv6
 nodes:
   - role: control-plane
     image: kindest/node:${kind_node_version}
     extraPortMappings:
     - containerPort: 80
       hostPort: 80
-      listenAddress: "127.0.0.1"
+      listenAddress: "::1"
     - containerPort: 443
       hostPort: 443
-      listenAddress: "127.0.0.1"
+      listenAddress: "::1"
     - containerPort: 30022
       hostPort: 30022
-      listenAddress: "127.0.0.1"
+      listenAddress: "::1"
 containerdConfigPatches:
 - |-
   [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:50000"]
@@ -131,6 +155,15 @@ containerdConfigPatches:
     endpoint = ["http://func-registry:5000"]
   [plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]
     endpoint = ["http://func-registry:5000"]
+kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      certSANs:
+        - "localhost"
+        - "localtest.me"
+        - "::"
+        - "::1"
 EOF
   sleep 10
   $KUBECTL wait pod --for=condition=Ready -l '!job-name' -n kube-system --timeout=5m
@@ -147,6 +180,12 @@ serving() {
   $KUBECTL wait --for=condition=Established --all crd --timeout=5m
 
   curl -L -s https://github.com/knative/serving/releases/download/knative-$knative_serving_version/serving-core.yaml | $KUBECTL apply -f -
+
+  # Patch autoscaler image: upstream Knative bug hardcodes EndpointSlice
+  # AddressType to IPv4, crashing the autoscaler on IPv6-only clusters.
+  # This patched image detects the IP family from POD_IP.
+  $KUBECTL set image deployment/autoscaler -n knative-serving \
+    autoscaler="quay.io/mvasek/knative/autoscaler@sha256:43590413c0a22c00146f9fcfd68ca8fe9a55e09fe125d7b01716bfabb80b03b9"
 
   sleep 2
   $KUBECTL wait pod --for=condition=Ready -l '!job-name' -n knative-serving --timeout=5m
@@ -239,8 +278,9 @@ networking() {
 
   echo "Installing a configured Contour."
   curl -sSL "https://github.com/knative/net-contour/releases/download/knative-${contour_version}/contour.yaml" \
+    | $YQ '(select(.kind == "Deployment" and .metadata.name == "contour").spec.template.spec.containers[0].args[] | select(. == "--xds-address=0.0.0.0")) = "--xds-address=::"' \
     | $YQ '(select(.kind == "Deployment" and .metadata.name == "contour").spec.template.spec.containers[0].args)
-          += ["--envoy-service-http-address=::", "--envoy-service-https-address=::"]' \
+          += ["--envoy-service-http-address=::", "--envoy-service-https-address=::", "--stats-address=::"]' \
     | $KUBECTL apply -f -
 
   sleep 5
@@ -322,10 +362,10 @@ registry() {
 
   echo "${blue}Creating Registry${reset}"
   if [ "$CONTAINER_ENGINE" == "docker" ]; then
-    $CONTAINER_ENGINE run -d --restart=always -p "127.0.0.1:50000:5000" --name "func-registry" registry:2
+    $CONTAINER_ENGINE run -d --restart=always -p "50000:5000" --name "func-registry" registry:2
     $CONTAINER_ENGINE network connect "kind" "func-registry"
   elif [ "$CONTAINER_ENGINE" == "podman" ]; then
-    $CONTAINER_ENGINE run -d --restart=always -p "127.0.0.1:50000:5000" --net=kind --name "func-registry" registry:2
+    $CONTAINER_ENGINE run -d --restart=always -p "50000:5000" --net=kind --name "func-registry" registry:2
   fi
 
   $KUBECTL apply -f - <<EOF
@@ -412,6 +452,7 @@ dapr_runtime() {
   if [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
     dapr_flags="--image-registry=ghcr.io/dapr --log-as-json"
   fi
+  dapr_flags="--image-registry=quay.io/mvasek/dapr --log-as-json"
 
   # Install Dapr Runtime
   # shellcheck disable=SC2086
@@ -598,10 +639,37 @@ localtest.me.            IN      AAAA    ${cluster_node_addr6}\n\
 *.localtest.me.          IN      AAAA    ${cluster_node_addr6}\n"
   fi
 
+  # On IPv6-only clusters, CoreDNS pods can only speak IPv6 but the node's
+  # /etc/resolv.conf may contain only an IPv4 nameserver (e.g. 172.18.0.1 on
+  # Docker). Bridge this gap with socat: proxy DNS from the node's IPv6
+  # address to the IPv4 nameserver. This preserves full container-runtime DNS
+  # resolution (container names, search domains, etc.).
+  # Note: the node itself may be dual-stack (Docker assigns IPv4 to the
+  # container regardless of Kind's ipFamily), so we check whether CoreDNS
+  # pods have IPv4 to determine if the cluster is truly IPv6-only.
+  local dns_forward="forward . /etc/resolv.conf"
+  local node_resolv
+  node_resolv="$($CONTAINER_ENGINE exec func-control-plane cat /etc/resolv.conf 2>/dev/null || true)"
+  local coredns_ip
+  coredns_ip="$($KUBECTL get pods -n kube-system -l k8s-app=kube-dns -o jsonpath='{.items[0].status.podIP}' 2>/dev/null || true)"
+  if [[ "$coredns_ip" == *":"* ]] && [[ -n "$cluster_node_addr6" ]] && ! echo "$node_resolv" | grep -qE 'nameserver\s+[0-9a-fA-F]*:'; then
+    local ipv4_ns
+    ipv4_ns="$(echo "$node_resolv" | grep -oP 'nameserver\s+\K[0-9.]+' | head -1)"
+    if [[ -n "$ipv4_ns" ]]; then
+      echo "Node has no IPv6 nameservers — proxying DNS via socat (${cluster_node_addr6} → ${ipv4_ns})"
+      $CONTAINER_ENGINE exec func-control-plane bash -c "
+        apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq socat >/dev/null 2>&1
+        socat UDP6-LISTEN:53,bind=[${cluster_node_addr6}],fork,reuseaddr UDP4:${ipv4_ns}:53 &
+        socat TCP6-LISTEN:53,bind=[${cluster_node_addr6}],fork,reuseaddr TCP4:${ipv4_ns}:53 &
+      "
+      dns_forward="forward . ${cluster_node_addr6}"
+    fi
+  fi
+
   $KUBECTL patch cm/coredns -n kube-system --patch-file /dev/stdin <<EOF
 {
   "data": {
-    "Corefile": ".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    file /etc/coredns/example.db localtest.me\n    prometheus :9153\n    forward . /etc/resolv.conf {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}\n",
+    "Corefile": ".:53 {\n    errors\n    health {\n       lameduck 5s\n    }\n    ready\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\n       pods insecure\n       fallthrough in-addr.arpa ip6.arpa\n       ttl 30\n    }\n    file /etc/coredns/example.db localtest.me\n    prometheus :9153\n    ${dns_forward} {\n       max_concurrent 1000\n    }\n    cache 30\n    loop\n    reload\n    loadbalance\n}\n",
     "example.db": "; localtest.me test file\n\
 localtest.me.            IN      SOA     sns.dns.icann.org. noc.dns.icann.org. 2015082541 7200 3600 1209600 3600\n\
 $a_recs\
