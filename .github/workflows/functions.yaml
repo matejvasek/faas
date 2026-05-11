@@ -365,6 +365,7 @@ jobs:
     name: E2E - Runtimes
     needs: test-e2e-podman
     strategy:
+      fail-fast: false
       max-parallel: 1
       matrix:
         runtime:
