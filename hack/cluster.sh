@@ -185,7 +185,7 @@ serving() {
   # AddressType to IPv4, crashing the autoscaler on IPv6-only clusters.
   # This patched image detects the IP family from POD_IP.
   $KUBECTL set image deployment/autoscaler -n knative-serving \
-    autoscaler="quay.io/mvasek/knative/autoscaler@sha256:6a2f328833e9ed516dd281aba891923082ddaa69e5907f0f0cef6d2402732e4c"
+    autoscaler="quay.io/mvasek/knative/autoscaler@sha256:43590413c0a22c00146f9fcfd68ca8fe9a55e09fe125d7b01716bfabb80b03b9"
 
   sleep 2
   $KUBECTL wait pod --for=condition=Ready -l '!job-name' -n knative-serving --timeout=5m
