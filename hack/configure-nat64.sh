@@ -136,6 +136,14 @@ EOF
   sudo sysctl -w net.ipv4.ip_forward=1
   sudo sysctl -w net.ipv6.conf.all.forwarding=1
 
+  # TAYGA writes translated IPv4 packets to the TUN with source ipv4-addr
+  # (192.168.255.1), which is a local address on the nat64 interface.
+  # The kernel drops such packets by default (accept_local=0, rp_filter).
+  # Effective rp_filter = max(all, per-interface), so both must be set.
+  sudo sysctl -w net.ipv4.conf.nat64.accept_local=1
+  sudo sysctl -w net.ipv4.conf.nat64.rp_filter=0
+  sudo sysctl -w net.ipv4.conf.all.rp_filter=0
+
   # Allow forwarding through the NAT64 TUN device.
   # Docker's DOCKER-FORWARD chain ends with a catch-all DROP, so we need rules
   # in DOCKER-USER (processed first) AND set the policy to ACCEPT as a fallback.
@@ -195,20 +203,7 @@ verify() {
   fi
   echo "DNS64 OK: github.com -> ${aaaa}"
 
-  # Capture traffic on nat64 TUN during ping to trace the packet flow
-  sudo tcpdump -i ${TAYGA_DEV} -nn -c 10 -l 2>&1 &
-  local tcpdump_pid=$!
-  sleep 1
-
-  # Verify NAT64 connectivity with ping (simpler than curl, no TLS)
-  ping -6 -c 1 -W 5 ghcr.io || true
-
-  # Give tcpdump a moment to flush, then stop it
-  sleep 2
-  sudo kill ${tcpdump_pid} 2>/dev/null || true
-  wait ${tcpdump_pid} 2>/dev/null || true
-
-  # Now do the real check
+  # Verify NAT64 connectivity
   if ! ping -6 -c 3 -W 5 ghcr.io; then
     echo "${red}NAT64 verification failed: cannot ping ghcr.io over IPv6${reset}"
     dump_diagnostics
