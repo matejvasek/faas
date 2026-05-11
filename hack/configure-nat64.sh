@@ -137,7 +137,9 @@ EOF
   sudo sysctl -w net.ipv6.conf.all.forwarding=1
 
   # Allow forwarding through the NAT64 TUN device.
-  # Rules must go in DOCKER-USER (processed before DOCKER-FORWARD's catch-all DROP).
+  # Docker's DOCKER-FORWARD chain ends with a catch-all DROP, so we need rules
+  # in DOCKER-USER (processed first) AND set the policy to ACCEPT as a fallback.
+  sudo iptables -P FORWARD ACCEPT
   sudo iptables -I DOCKER-USER -i ${TAYGA_DEV} -j ACCEPT
   sudo iptables -I DOCKER-USER -o ${TAYGA_DEV} -j ACCEPT
 
@@ -168,8 +170,14 @@ dump_diagnostics() {
   ip -4 route show 2>&1
   echo "iptables FORWARD chain:"
   sudo iptables -S FORWARD 2>&1 || true
+  echo "iptables DOCKER-USER chain:"
+  sudo iptables -S DOCKER-USER 2>&1 || true
+  echo "iptables DOCKER-FORWARD chain:"
+  sudo iptables -S DOCKER-FORWARD 2>&1 || true
   echo "iptables NAT POSTROUTING:"
   sudo iptables -t nat -S POSTROUTING 2>&1 || true
+  echo "TAYGA syslog:"
+  sudo grep -i tayga /var/log/syslog 2>/dev/null | tail -20 || true
   echo "${yellow}--- End Diagnostics ---${reset}"
 }
 
@@ -187,7 +195,20 @@ verify() {
   fi
   echo "DNS64 OK: github.com -> ${aaaa}"
 
-  # Verify NAT64 connectivity with ping first (simpler than curl, no TLS)
+  # Capture traffic on nat64 TUN during ping to trace the packet flow
+  sudo tcpdump -i ${TAYGA_DEV} -nn -c 10 -l 2>&1 &
+  local tcpdump_pid=$!
+  sleep 1
+
+  # Verify NAT64 connectivity with ping (simpler than curl, no TLS)
+  ping -6 -c 1 -W 5 ghcr.io || true
+
+  # Give tcpdump a moment to flush, then stop it
+  sleep 2
+  sudo kill ${tcpdump_pid} 2>/dev/null || true
+  wait ${tcpdump_pid} 2>/dev/null || true
+
+  # Now do the real check
   if ! ping -6 -c 3 -W 5 ghcr.io; then
     echo "${red}NAT64 verification failed: cannot ping ghcr.io over IPv6${reset}"
     dump_diagnostics
