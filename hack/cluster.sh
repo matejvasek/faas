@@ -108,16 +108,29 @@ kubernetes() {
   cat <<EOF | $KIND create cluster --name=func --kubeconfig="${KUBECONFIG}" --wait=60s --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  apiServerAddress: "::1"
+  apiServerPort: 6443
+  ipFamily: ipv6
 nodes:
   - role: control-plane
     image: kindest/node:${kind_node_version}
     extraPortMappings:
     - containerPort: 80
       hostPort: 80
+      listenAddress: "::1"
+    - containerPort: 80
+      hostPort: 80
       listenAddress: "127.0.0.1"
     - containerPort: 443
       hostPort: 443
+      listenAddress: "::1"
+    - containerPort: 443
+      hostPort: 443
       listenAddress: "127.0.0.1"
+    - containerPort: 30022
+      hostPort: 30022
+      listenAddress: "::1"
     - containerPort: 30022
       hostPort: 30022
       listenAddress: "127.0.0.1"
@@ -131,6 +144,15 @@ containerdConfigPatches:
     endpoint = ["http://func-registry:5000"]
   [plugins."io.containerd.grpc.v1.cri".registry.mirrors."quay.io"]
     endpoint = ["http://func-registry:5000"]
+kubeadmConfigPatches:
+  - |
+    kind: ClusterConfiguration
+    apiServer:
+      certSANs:
+        - "localhost"
+        - "localtest.me"
+        - "::"
+        - "::1"
 EOF
   sleep 10
   $KUBECTL wait pod --for=condition=Ready -l '!job-name' -n kube-system --timeout=5m
@@ -147,6 +169,12 @@ serving() {
   $KUBECTL wait --for=condition=Established --all crd --timeout=5m
 
   curl -L -s https://github.com/knative/serving/releases/download/knative-$knative_serving_version/serving-core.yaml | $KUBECTL apply -f -
+
+  # Patch autoscaler image: upstream Knative bug hardcodes EndpointSlice
+  # AddressType to IPv4, crashing the autoscaler on IPv6-only clusters.
+  # This patched image detects the IP family from POD_IP.
+  $KUBECTL set image deployment/autoscaler -n knative-serving \
+    autoscaler="quay.io/mvasek/knative/autoscaler@sha256:6a2f328833e9ed516dd281aba891923082ddaa69e5907f0f0cef6d2402732e4c"
 
   sleep 2
   $KUBECTL wait pod --for=condition=Ready -l '!job-name' -n knative-serving --timeout=5m
@@ -239,8 +267,9 @@ networking() {
 
   echo "Installing a configured Contour."
   curl -sSL "https://github.com/knative/net-contour/releases/download/knative-${contour_version}/contour.yaml" \
+    | $YQ '(select(.kind == "Deployment" and .metadata.name == "contour").spec.template.spec.containers[0].args[] | select(. == "--xds-address=0.0.0.0")) = "--xds-address=::"' \
     | $YQ '(select(.kind == "Deployment" and .metadata.name == "contour").spec.template.spec.containers[0].args)
-          += ["--envoy-service-http-address=::", "--envoy-service-https-address=::"]' \
+          += ["--envoy-service-http-address=::", "--envoy-service-https-address=::", "--stats-address=::"]' \
     | $KUBECTL apply -f -
 
   sleep 5
@@ -412,6 +441,7 @@ dapr_runtime() {
   if [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
     dapr_flags="--image-registry=ghcr.io/dapr --log-as-json"
   fi
+  dapr_flags="--image-registry=quay.io/mvasek/dapr --log-as-json"
 
   # Install Dapr Runtime
   # shellcheck disable=SC2086

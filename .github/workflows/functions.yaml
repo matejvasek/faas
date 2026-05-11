@@ -77,14 +77,6 @@ jobs:
       - name: Run Unit Tests
         run: make test
 
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: unit ${{ matrix.os }}
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
-
   # --------------
   # TEMPLATE TESTS
   # --------------
@@ -161,6 +153,8 @@ jobs:
 
       - name: Install Binaries
         run: ./hack/binaries.sh
+      - name: Configure IPv6
+        run: ./hack/configure-nat64.sh
       - name: Allocate Cluster
         run: ./hack/cluster.sh
       - name: Start Local Registry
@@ -174,14 +168,6 @@ jobs:
 
       - name: Run Integration Tests
         run: make test-integration
-
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: integration
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs
@@ -221,6 +207,8 @@ jobs:
 
       - name: Install Binaries
         run: ./hack/binaries.sh
+      - name: Configure IPv6
+        run: ./hack/configure-nat64.sh
       - name: Allocate Cluster
         run: ./hack/cluster.sh
       - name: Start Local Registry
@@ -230,14 +218,6 @@ jobs:
 
       - name: Run Basic E2E Tests (core, metadata, remote)
         run: make test-e2e
-
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: e2e
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs
@@ -286,6 +266,8 @@ jobs:
 
       - name: Install Binaries
         run: ./hack/binaries.sh
+      - name: Configure IPv6
+        run: ./hack/configure-nat64.sh
       - name: Allocate Cluster
         run: ./hack/cluster.sh
       - name: Start Local Registry
@@ -293,14 +275,6 @@ jobs:
 
       - name: Run E2E Podman Tests
         run: make test-e2e-podman
-
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: e2e
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs
@@ -373,6 +347,8 @@ jobs:
       # Allocate Cluster
       - name: Install Binaries
         run: ./hack/binaries.sh
+      - name: Configure IPv6
+        run: ./hack/configure-nat64.sh
       - name: Allocate Cluster
         run: ./hack/cluster.sh
       - name: Start Local Registry
@@ -382,15 +358,6 @@ jobs:
 
       - name: Run Test - ${{ matrix.runtime }}
         run: make test-e2e-matrix
-
-      # Coverage and Logs
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: e2e ${{ matrix.runtime }}
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs
@@ -429,6 +396,8 @@ jobs:
 
       - name: Install Binaries
         run: ./hack/binaries.sh
+      - name: Configure IPv6
+        run: ./hack/configure-nat64.sh
       - name: Allocate Cluster
         run: ./hack/cluster.sh
       - name: Start Local Registry
@@ -438,14 +407,6 @@ jobs:
 
       - name: Run Config CI E2E Tests
         run: make test-e2e-config-ci
-
-      - uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          flags: e2e-config-ci
-          fail_ci_if_error: true
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       # Preserve Cluster Logs
       - name: Dump Cluster Logs
