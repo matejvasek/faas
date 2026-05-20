@@ -227,6 +227,8 @@ loadbalancer() {
   local kind_addr6
   local addr_array
 
+  $CONTAINER_ENGINE container inspect func-control-plane | jq '.[0].NetworkSettings.Networks.kind'
+
   kind_addr="$($CONTAINER_ENGINE container inspect func-control-plane | jq '.[0].NetworkSettings.Networks.kind.IPAddress' -r)"
   kind_addr6="$($CONTAINER_ENGINE container inspect func-control-plane | jq '.[0].NetworkSettings.Networks.kind.GlobalIPv6Address' -r)"
 
