@@ -8,8 +8,8 @@ FUNC_UTILS_IMG="registry.localtest.me/knative/func-utils:v2"
 
 CGO_ENABLED=0 go build -o "func-util" -trimpath -ldflags '-w -s' ./cmd/func-util
 
-docker build . -f Dockerfile.utils -t "${FUNC_UTILS_IMG}" --build-arg FUNC_UTIL_BINARY=func-util
-docker push "${FUNC_UTILS_IMG}"
+docker --log-level="debug" build . -f Dockerfile.utils -t "${FUNC_UTILS_IMG}" --build-arg FUNC_UTIL_BINARY=func-util
+docker --log-level="debug" push "${FUNC_UTILS_IMG}"
 
 # Build custom buildah image for tests.
 # This image will accept registries ending with .cluster.local as insecure (non-TLS).
