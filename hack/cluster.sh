@@ -98,6 +98,21 @@ allocate_cluster() {
     wait "$job"
   done
 
+  # Debug: verify what is listening inside the Envoy container's network namespace
+  echo "=== Debug: checking Envoy listeners ==="
+  $CONTAINER_ENGINE exec func-control-plane bash -c '
+    apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq net-tools >/dev/null 2>&1
+    cid=$(crictl ps --name envoy -q | head -1)
+    if [ -n "$cid" ]; then
+      pid=$(crictl inspect --output go-template --template "{{.info.pid}}" "$cid")
+      echo "Envoy container: $cid  PID: $pid"
+      nsenter -t "$pid" -n netstat -tlnp
+    else
+      echo "No envoy container found"
+      crictl ps
+    fi
+  ' || true
+
   # Configure magic DNS for localtest.me after all services are up
   magic_dns
 
