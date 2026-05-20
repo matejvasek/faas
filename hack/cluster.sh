@@ -242,6 +242,7 @@ loadbalancer() {
 
 
   echo "Setting up address pool."
+  echo "IPAddressPool: ${addr_array}"
   $KUBECTL apply -f - <<EOF
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
