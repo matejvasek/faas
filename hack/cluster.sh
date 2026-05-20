@@ -121,6 +121,7 @@ docker_enable_ipv6() {
 }
 
 kubernetes() {
+  $CONTAINER_ENGINE version
   docker_enable_ipv6
   cat <<EOF | $KIND create cluster --name=func --kubeconfig="${KUBECONFIG}" --wait=60s --config=-
 kind: Cluster
