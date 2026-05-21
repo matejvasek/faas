@@ -98,19 +98,19 @@ allocate_cluster() {
     wait "$job"
   done
 
-  # Debug: verify what is listening inside the Envoy container's network namespace
-  echo "=== Debug: checking Envoy listeners ==="
+  # Debug: test port 80 reachability on the container's own IPv4 and IPv6 addresses
+  echo "=== Debug: curl from inside func-control-plane ==="
   $CONTAINER_ENGINE exec func-control-plane bash -c '
-    apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq net-tools >/dev/null 2>&1
-    cid=$(crictl ps --name envoy -q | head -1)
-    if [ -n "$cid" ]; then
-      pid=$(crictl inspect --output go-template --template "{{.info.pid}}" "$cid")
-      echo "Envoy container: $cid  PID: $pid"
-      nsenter -t "$pid" -n netstat -tlnp
-    else
-      echo "No envoy container found"
-      crictl ps
-    fi
+    apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq curl >/dev/null 2>&1
+    ipv4=$(hostname -I | awk "{print \$1}")
+    ipv6=$(ip -6 addr show dev eth0 scope global | grep -oP "(?<=inet6 )[\da-f:]+" | head -1)
+    echo "Container IPv4: $ipv4"
+    echo "Container IPv6: $ipv6"
+    echo "--- curl http://$ipv4:80/ ---"
+    curl -v --connect-timeout 5 "http://$ipv4:80/" 2>&1 || true
+    echo ""
+    echo "--- curl http://[$ipv6]:80/ ---"
+    curl -v --connect-timeout 5 "http://[$ipv6]:80/" 2>&1 || true
   ' || true
 
   # Configure magic DNS for localtest.me after all services are up
