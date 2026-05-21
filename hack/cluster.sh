@@ -98,6 +98,21 @@ allocate_cluster() {
     wait "$job"
   done
 
+  # Debug: test port 80 reachability on the container's own IPv4 and IPv6 addresses
+  echo "=== Debug: curl from inside func-control-plane ==="
+  $CONTAINER_ENGINE exec func-control-plane bash -c '
+    apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq curl >/dev/null 2>&1
+    ipv4=$(hostname -I | awk "{print \$1}")
+    ipv6=$(ip -6 addr show dev eth0 scope global | grep -oP "(?<=inet6 )[\da-f:]+" | head -1)
+    echo "Container IPv4: $ipv4"
+    echo "Container IPv6: $ipv6"
+    echo "--- curl http://$ipv4:80/ ---"
+    curl -v --connect-timeout 5 "http://$ipv4:80/" 2>&1 || true
+    echo ""
+    echo "--- curl http://[$ipv6]:80/ ---"
+    curl -v --connect-timeout 5 "http://[$ipv6]:80/" 2>&1 || true
+  ' || true
+
   # Configure magic DNS for localtest.me after all services are up
   magic_dns
 
@@ -106,10 +121,28 @@ allocate_cluster() {
   echo -e "\n${green}🎉 DONE${reset}\n"
 }
 
+docker_enable_ipv6() {
+  if [ "${GITHUB_ACTIONS:-false}" = "true" ] && [ "$CONTAINER_ENGINE" = "docker" ]; then
+    echo "${blue}Enabling Docker IPv6 support${reset}"
+    local daemon_json="/etc/docker/daemon.json"
+    if [ ! -f "$daemon_json" ]; then
+      echo '{}' | sudo tee "$daemon_json" > /dev/null
+    fi
+    sudo jq '. + {"ipv6": true, "ip6tables": true, "fixed-cidr-v6": "fd00::/80"}' "$daemon_json" > /tmp/daemon.json.tmp \
+      && sudo mv /tmp/daemon.json.tmp "$daemon_json"
+    sudo systemctl restart docker
+    echo "${green}✅ Docker IPv6${reset}"
+  fi
+}
+
 kubernetes() {
+  $CONTAINER_ENGINE version
+  docker_enable_ipv6
   cat <<EOF | $KIND create cluster --name=func --kubeconfig="${KUBECONFIG}" --wait=60s --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  ipFamily: dual
 nodes:
   - role: control-plane
     image: kindest/node:${kind_node_version}
@@ -117,12 +150,21 @@ nodes:
     - containerPort: 80
       hostPort: 80
       listenAddress: "127.0.0.1"
+    - containerPort: 80
+      hostPort: 80
+      listenAddress: "::1"
     - containerPort: 443
       hostPort: 443
       listenAddress: "127.0.0.1"
+    - containerPort: 443
+      hostPort: 443
+      listenAddress: "::1"
     - containerPort: 30022
       hostPort: 30022
       listenAddress: "127.0.0.1"
+    - containerPort: 30022
+      hostPort: 30022
+      listenAddress: "::1"
 containerdConfigPatches:
 - |-
   [plugins."io.containerd.grpc.v1.cri".registry.mirrors."registry.localtest.me"]
@@ -137,6 +179,7 @@ EOF
   sleep 10
   $KUBECTL wait pod --for=condition=Ready -l '!job-name' -n kube-system --timeout=5m
   echo "${green}✅ Kubernetes${reset}"
+  docker network inspect kind
 }
 
 serving() {
@@ -202,6 +245,8 @@ loadbalancer() {
   local kind_addr6
   local addr_array
 
+  $CONTAINER_ENGINE container inspect func-control-plane | jq '.[0].NetworkSettings.Networks.kind'
+
   kind_addr="$($CONTAINER_ENGINE container inspect func-control-plane | jq '.[0].NetworkSettings.Networks.kind.IPAddress' -r)"
   kind_addr6="$($CONTAINER_ENGINE container inspect func-control-plane | jq '.[0].NetworkSettings.Networks.kind.GlobalIPv6Address' -r)"
 
@@ -217,6 +262,7 @@ loadbalancer() {
 
 
   echo "Setting up address pool."
+  echo "IPAddressPool: ${addr_array[@]}"
   $KUBECTL apply -f - <<EOF
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
