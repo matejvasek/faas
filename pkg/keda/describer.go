@@ -93,6 +93,19 @@ func (d *Describer) Describe(ctx context.Context, name, namespace string) (fn.In
 	}
 	primaryRouteURL := routes[0]
 
+	// On OpenShift, check for an exposed Route and use its URL as primary
+	if k8s.IsOpenShift() {
+		dynamicClient, err := k8s.NewDynamicClient()
+		if err == nil {
+			host, err := k8s.GetRouteHost(ctx, dynamicClient, name, namespace)
+			if err == nil && host != "" {
+				routeURL := fmt.Sprintf("https://%s", host)
+				routes = append([]string{routeURL}, routes...)
+				primaryRouteURL = routeURL
+			}
+		}
+	}
+
 	deploymentClient := clientset.AppsV1().Deployments(namespace)
 	deployment, err := deploymentClient.Get(ctx, name, metav1.GetOptions{})
 	if err != nil {

@@ -3,6 +3,7 @@ package keda
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	httpv1alpha1 "github.com/kedacore/http-add-on/operator/apis/http/v1alpha1"
@@ -11,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/ptr"
 	"knative.dev/func/pkg/deployer"
@@ -124,13 +126,64 @@ func (d *Deployer) Deploy(ctx context.Context, f fn.Function) (fn.DeploymentResu
 		d.interceptorBridgeServiceName(f),
 	}
 
+	// On OpenShift, create a Route to expose the function externally.
+	// The Route targets a route-proxy service (no selector) backed by
+	// Endpoints pointing to the KEDA interceptor proxy's ClusterIP, so
+	// external traffic goes through the interceptor and is counted for
+	// autoscaling.
+	if k8s.IsOpenShift() {
+		interceptorClusterIP, interceptorPort, err := d.getInterceptorProxyAddress(ctx, k8sClientset)
+		if err != nil {
+			return fn.DeploymentResult{}, fmt.Errorf("failed to get interceptor proxy address: %w", err)
+		}
+
+		routeProxyName := d.routeProxyServiceName(f)
+		if err := d.ensureRouteProxyService(ctx, k8sClientset, f, namespace, deployment, interceptorPort); err != nil {
+			return fn.DeploymentResult{}, fmt.Errorf("failed to ensure route-proxy service: %w", err)
+		}
+
+		if err := d.ensureRouteProxyEndpoints(ctx, k8sClientset, f, namespace, deployment, interceptorClusterIP, interceptorPort); err != nil {
+			return fn.DeploymentResult{}, fmt.Errorf("failed to ensure route-proxy endpoints: %w", err)
+		}
+
+		dynamicClient, err := k8s.NewDynamicClient()
+		if err != nil {
+			return fn.DeploymentResult{}, fmt.Errorf("failed to create dynamic client: %w", err)
+		}
+
+		if err := k8s.EnsureRoute(ctx, dynamicClient, f.Name, namespace, routeProxyName, int(interceptorPort), deployment); err != nil {
+			return fn.DeploymentResult{}, fmt.Errorf("failed to ensure OpenShift Route: %w", err)
+		}
+
+		routeHost, err := k8s.WaitForRouteAdmitted(ctx, dynamicClient, f.Name, namespace, k8s.DefaultWaitingTimeout)
+		if err != nil {
+			return fn.DeploymentResult{}, fmt.Errorf("OpenShift Route not admitted: %w", err)
+		}
+
+		// Add the Route hostname to the HTTPScaledObject so the interceptor
+		// matches external traffic by Host header.
+		hosts = append(hosts, routeHost)
+
+		if err := d.ensureHTTPScaledObject(ctx, f, namespace, deployment, appService, hosts); err != nil {
+			return fn.DeploymentResult{}, fmt.Errorf("failed to ensure http scaled object exists: %w", err)
+		}
+
+		fmt.Fprintf(os.Stderr, "🌐 Function exposed via OpenShift Route: https://%s\n", routeHost)
+
+		return fn.DeploymentResult{
+			Status:    deployResult.Status,
+			URL:       fmt.Sprintf("https://%s", routeHost),
+			Namespace: deployResult.Namespace,
+		}, nil
+	}
+
 	if err := d.ensureHTTPScaledObject(ctx, f, namespace, deployment, appService, hosts); err != nil {
 		return fn.DeploymentResult{}, fmt.Errorf("failed to ensure http scaled object exists: %w", err)
 	}
 
 	return fn.DeploymentResult{
 		Status:    deployResult.Status,
-		URL:       fmt.Sprintf("http://%s:8080", hosts[0]), // TODO: check on HTTPS too
+		URL:       fmt.Sprintf("http://%s:8080", hosts[0]),
 		Namespace: deployResult.Namespace,
 	}, nil
 }
@@ -314,4 +367,147 @@ func UsesKedaDeployer(annotations map[string]string) bool {
 	deployer, ok := annotations[deployer.DeployerNameAnnotation]
 
 	return ok && deployer == KedaDeployerName
+}
+
+const (
+	kedaInterceptorProxyServiceName = "keda-add-ons-http-interceptor-proxy"
+	kedaNamespace                   = "keda"
+)
+
+func (d *Deployer) routeProxyServiceName(f fn.Function) string {
+	return fmt.Sprintf("%s-route-proxy", f.Name)
+}
+
+// getInterceptorProxyAddress looks up the KEDA HTTP interceptor proxy Service
+// in the keda namespace and returns its ClusterIP and port.
+func (d *Deployer) getInterceptorProxyAddress(ctx context.Context, clientset *kubernetes.Clientset) (string, int32, error) {
+	svc, err := clientset.CoreV1().Services(kedaNamespace).Get(ctx, kedaInterceptorProxyServiceName, metav1.GetOptions{})
+	if err != nil {
+		return "", 0, fmt.Errorf("failed to get interceptor proxy service %s/%s: %w", kedaNamespace, kedaInterceptorProxyServiceName, err)
+	}
+
+	if svc.Spec.ClusterIP == "" || svc.Spec.ClusterIP == "None" {
+		return "", 0, fmt.Errorf("interceptor proxy service %s/%s has no ClusterIP", kedaNamespace, kedaInterceptorProxyServiceName)
+	}
+
+	port := int32(8080)
+	if len(svc.Spec.Ports) > 0 {
+		port = svc.Spec.Ports[0].Port
+	}
+
+	return svc.Spec.ClusterIP, port, nil
+}
+
+// ensureRouteProxyService creates or updates a no-selector ClusterIP Service
+// in the function namespace that serves as the Route's target.
+func (d *Deployer) ensureRouteProxyService(ctx context.Context, clientset *kubernetes.Clientset, f fn.Function, namespace string, deployment *v1.Deployment, port int32) error {
+	name := d.routeProxyServiceName(f)
+
+	expected := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       deployment.Name,
+					UID:        deployment.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http",
+					Port:       port,
+					TargetPort: intstr.FromInt32(port),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+			// No selector — endpoints are managed manually
+		},
+	}
+
+	existing, err := clientset.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			_, err = clientset.CoreV1().Services(namespace).Create(ctx, expected, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create route-proxy service: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get route-proxy service: %w", err)
+	}
+
+	if !equality.Semantic.DeepEqual(existing.Spec, expected.Spec) {
+		expected.ResourceVersion = existing.ResourceVersion
+		_, err = clientset.CoreV1().Services(namespace).Update(ctx, expected, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to update route-proxy service: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// ensureRouteProxyEndpoints creates or updates Endpoints for the route-proxy
+// Service, pointing to the KEDA interceptor proxy's ClusterIP.
+func (d *Deployer) ensureRouteProxyEndpoints(ctx context.Context, clientset *kubernetes.Clientset, f fn.Function, namespace string, deployment *v1.Deployment, interceptorClusterIP string, port int32) error {
+	name := d.routeProxyServiceName(f)
+
+	expected := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       deployment.Name,
+					UID:        deployment.UID,
+					Controller: ptr.To(true),
+				},
+			},
+		},
+		Subsets: []corev1.EndpointSubset{
+			{
+				Addresses: []corev1.EndpointAddress{
+					{IP: interceptorClusterIP},
+				},
+				Ports: []corev1.EndpointPort{
+					{
+						Name:     "http",
+						Port:     port,
+						Protocol: corev1.ProtocolTCP,
+					},
+				},
+			},
+		},
+	}
+
+	existing, err := clientset.CoreV1().Endpoints(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			_, err = clientset.CoreV1().Endpoints(namespace).Create(ctx, expected, metav1.CreateOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to create route-proxy endpoints: %w", err)
+			}
+			return nil
+		}
+		return fmt.Errorf("failed to get route-proxy endpoints: %w", err)
+	}
+
+	if !equality.Semantic.DeepEqual(existing.Subsets, expected.Subsets) {
+		expected.ResourceVersion = existing.ResourceVersion
+		_, err = clientset.CoreV1().Endpoints(namespace).Update(ctx, expected, metav1.UpdateOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to update route-proxy endpoints: %w", err)
+		}
+	}
+
+	return nil
 }

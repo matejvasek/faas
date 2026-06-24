@@ -79,6 +79,17 @@ func (l *Lister) get(ctx context.Context, httpScaledObjectClientset *versioned.C
 		url = fmt.Sprintf("http://%s:8080", httpScaledObject.Spec.Hosts[0])
 	}
 
+	// On OpenShift, prefer the Route URL
+	if k8s.IsOpenShift() {
+		dynamicClient, err := k8s.NewDynamicClient()
+		if err == nil {
+			host, err := k8s.GetRouteHost(ctx, dynamicClient, name, namespace)
+			if err == nil && host != "" {
+				url = fmt.Sprintf("https://%s", host)
+			}
+		}
+	}
+
 	runtimeLabel := ""
 	listItem := fn.ListItem{
 		Name:      name,
