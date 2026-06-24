@@ -188,12 +188,16 @@ func TestInt_RouteCreated(t *testing.T) {
 		t.Errorf("expected route-proxy service to have no selector, got %v", proxySvc.Spec.Selector)
 	}
 
-	endpoints, err := k8sClient.CoreV1().Endpoints(ns).Get(ctx, expectedTarget, metav1.GetOptions{})
+	endpointSlice, err := k8sClient.DiscoveryV1().EndpointSlices(ns).Get(ctx, expectedTarget, metav1.GetOptions{})
 	if err != nil {
-		t.Fatalf("endpoints %q not found: %v", expectedTarget, err)
+		t.Fatalf("endpointslice %q not found: %v", expectedTarget, err)
 	}
-	if len(endpoints.Subsets) == 0 || len(endpoints.Subsets[0].Addresses) == 0 {
-		t.Fatal("endpoints have no addresses (should point to interceptor proxy ClusterIP)")
+	if len(endpointSlice.Endpoints) == 0 || len(endpointSlice.Endpoints[0].Addresses) == 0 {
+		t.Fatal("endpointslice has no addresses (should point to interceptor proxy ClusterIP)")
+	}
+	// Verify the kubernetes.io/service-name label
+	if svcName, ok := endpointSlice.Labels["kubernetes.io/service-name"]; !ok || svcName != expectedTarget {
+		t.Errorf("expected endpointslice label kubernetes.io/service-name=%q, got %q", expectedTarget, svcName)
 	}
 
 	// 6. Verify HTTPScaledObject hosts include the Route hostname

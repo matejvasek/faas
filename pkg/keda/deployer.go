@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	httpv1alpha1 "github.com/kedacore/http-add-on/operator/apis/http/v1alpha1"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -142,8 +144,8 @@ func (d *Deployer) Deploy(ctx context.Context, f fn.Function) (fn.DeploymentResu
 			return fn.DeploymentResult{}, fmt.Errorf("failed to ensure route-proxy service: %w", err)
 		}
 
-		if err := d.ensureRouteProxyEndpoints(ctx, k8sClientset, f, namespace, deployment, interceptorClusterIP, interceptorPort); err != nil {
-			return fn.DeploymentResult{}, fmt.Errorf("failed to ensure route-proxy endpoints: %w", err)
+		if err := d.ensureRouteProxyEndpointSlice(ctx, k8sClientset, f, namespace, deployment, interceptorClusterIP, interceptorPort); err != nil {
+			return fn.DeploymentResult{}, fmt.Errorf("failed to ensure route-proxy endpointslice: %w", err)
 		}
 
 		dynamicClient, err := k8s.NewDynamicClient()
@@ -454,15 +456,25 @@ func (d *Deployer) ensureRouteProxyService(ctx context.Context, clientset *kuber
 	return nil
 }
 
-// ensureRouteProxyEndpoints creates or updates Endpoints for the route-proxy
-// Service, pointing to the KEDA interceptor proxy's ClusterIP.
-func (d *Deployer) ensureRouteProxyEndpoints(ctx context.Context, clientset *kubernetes.Clientset, f fn.Function, namespace string, deployment *v1.Deployment, interceptorClusterIP string, port int32) error {
+// ensureRouteProxyEndpointSlice creates or updates an EndpointSlice for the
+// route-proxy Service, pointing to the KEDA interceptor proxy's ClusterIP.
+func (d *Deployer) ensureRouteProxyEndpointSlice(ctx context.Context, clientset *kubernetes.Clientset, f fn.Function, namespace string, deployment *v1.Deployment, interceptorClusterIP string, port int32) error {
 	name := d.routeProxyServiceName(f)
 
-	expected := &corev1.Endpoints{
+	addressType := discoveryv1.AddressTypeIPv4
+	if strings.Contains(interceptorClusterIP, ":") {
+		addressType = discoveryv1.AddressTypeIPv6
+	}
+
+	portName := "http"
+	protocol := corev1.ProtocolTCP
+	expected := &discoveryv1.EndpointSlice{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			Labels: map[string]string{
+				discoveryv1.LabelServiceName: name,
+			},
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: "apps/v1",
@@ -473,39 +485,39 @@ func (d *Deployer) ensureRouteProxyEndpoints(ctx context.Context, clientset *kub
 				},
 			},
 		},
-		Subsets: []corev1.EndpointSubset{
+		AddressType: addressType,
+		Endpoints: []discoveryv1.Endpoint{
 			{
-				Addresses: []corev1.EndpointAddress{
-					{IP: interceptorClusterIP},
-				},
-				Ports: []corev1.EndpointPort{
-					{
-						Name:     "http",
-						Port:     port,
-						Protocol: corev1.ProtocolTCP,
-					},
-				},
+				Addresses: []string{interceptorClusterIP},
+			},
+		},
+		Ports: []discoveryv1.EndpointPort{
+			{
+				Name:     &portName,
+				Port:     &port,
+				Protocol: &protocol,
 			},
 		},
 	}
 
-	existing, err := clientset.CoreV1().Endpoints(namespace).Get(ctx, name, metav1.GetOptions{})
+	existing, err := clientset.DiscoveryV1().EndpointSlices(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
-			_, err = clientset.CoreV1().Endpoints(namespace).Create(ctx, expected, metav1.CreateOptions{})
+			_, err = clientset.DiscoveryV1().EndpointSlices(namespace).Create(ctx, expected, metav1.CreateOptions{})
 			if err != nil {
-				return fmt.Errorf("failed to create route-proxy endpoints: %w", err)
+				return fmt.Errorf("failed to create route-proxy endpointslice: %w", err)
 			}
 			return nil
 		}
-		return fmt.Errorf("failed to get route-proxy endpoints: %w", err)
+		return fmt.Errorf("failed to get route-proxy endpointslice: %w", err)
 	}
 
-	if !equality.Semantic.DeepEqual(existing.Subsets, expected.Subsets) {
+	if !equality.Semantic.DeepEqual(existing.Endpoints, expected.Endpoints) ||
+		!equality.Semantic.DeepEqual(existing.Ports, expected.Ports) {
 		expected.ResourceVersion = existing.ResourceVersion
-		_, err = clientset.CoreV1().Endpoints(namespace).Update(ctx, expected, metav1.UpdateOptions{})
+		_, err = clientset.DiscoveryV1().EndpointSlices(namespace).Update(ctx, expected, metav1.UpdateOptions{})
 		if err != nil {
-			return fmt.Errorf("failed to update route-proxy endpoints: %w", err)
+			return fmt.Errorf("failed to update route-proxy endpointslice: %w", err)
 		}
 	}
 
