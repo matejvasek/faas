@@ -420,7 +420,7 @@ func (d *Deployer) ensureRouteProxyService(ctx context.Context, clientset *kuber
 			},
 		},
 		Spec: corev1.ServiceSpec{
-			Type: corev1.ServiceTypeClusterIP,
+			ClusterIP: corev1.ClusterIPNone,
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "http",
@@ -429,7 +429,7 @@ func (d *Deployer) ensureRouteProxyService(ctx context.Context, clientset *kuber
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
-			// No selector — endpoints are managed manually
+			// No selector — EndpointSlice is managed manually
 		},
 	}
 
